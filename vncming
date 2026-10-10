@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+VNCMING_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ ! -x "$VNCMING_ROOT/build/vncviewer/vncviewer" ]; then
+    echo '尚未构建 VNCMing。请在项目目录运行 ./scripts/build.sh。' >&2
+    exit 1
+fi
+exec /usr/bin/python3 "$VNCMING_ROOT/app/viewer.py" "$@"

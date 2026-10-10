@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+"""Compatibility entry point for earlier VNCMing launch commands."""
+import runpy
+import sys
+from pathlib import Path
+
+APP = Path(__file__).resolve().parent / 'app'
+sys.path.insert(0, str(APP))
+runpy.run_path(str(APP / 'viewer.py'), run_name='__main__')

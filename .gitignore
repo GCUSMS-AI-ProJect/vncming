@@ -1,0 +1,15 @@
+/build/
+/dist/
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+*.log
+*.core
+core
+/connections.json
+*.vnc
+*.tigervnc
+*.pem
+*.key

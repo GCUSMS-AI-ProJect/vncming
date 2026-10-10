@@ -1,0 +1,59 @@
+* { font-family: "Noto Sans CJK SC", sans-serif; font-size: 13px; }
+window { background: #f6f5f3; color: #292725; border-radius: 0 0 12px 12px; }
+window.maximized, window.fullscreen { border-radius: 0; }
+window.maximized headerbar, window.fullscreen headerbar { border-radius: 0; }
+decoration { border-radius: 12px; }
+headerbar { background: linear-gradient(to bottom, #faf9f8, #efeeec); border-bottom: 1px solid #dedbd7; border-radius: 12px 12px 0 0; padding: 9px 14px; box-shadow: none; }
+headerbar .title { font-weight: 700; color: #37322d; }
+menubar { background: #f6f5f3; padding: 3px 20px; }
+window.popup { background: transparent; border: none; border-radius: 0; }
+window.popup decoration { background: transparent; border-radius: 10px; box-shadow: 0 4px 12px alpha(#30241a, 0.12); }
+menu { background: #fbfaf9; color: #292725; border: 1px solid #e4dfd9; border-radius: 10px; padding: 4px; box-shadow: none; }
+menuitem { padding: 8px 14px; border-radius: 6px; transition: background-color 160ms ease, color 160ms ease; }
+menuitem:hover { background: #f58025; color: #ffffff; }
+.toolbar { background: #f6f5f3; padding: 14px 24px 18px; }
+.section { color: #37322d; font-size: 19px; font-weight: 700; }
+.empty-title { font-size: 24px; font-weight: 700; color: #37322d; }
+button { background-image: none; background-color: #ffffff; color: #514a43; border: 1px solid #ddd8d2; border-radius: 9px; padding: 8px 17px; box-shadow: 0 1px 2px alpha(#45301e, 0.06); transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease; }
+button:hover { background-color: #fff4e9; border-color: #f4bf94; box-shadow: 0 3px 7px alpha(#ae591a, 0.10); }
+button:active { background-color: #ffe2c9; border-color: #ed995a; box-shadow: inset 0 2px 4px alpha(#8c4818, 0.16); }
+button:disabled { color: #b5afa9; background-color: #f2efeb; box-shadow: none; }
+button.connect, button.suggested-action { background-color: #f58025; color: white; border-color: #eb7520; font-weight: 600; box-shadow: none; }
+button.connect:hover, button.suggested-action:hover { background-color: #ff943f; border-color: #f58a36; box-shadow: none; }
+button.connect:active, button.suggested-action:active { background-color: #dc6817; border-color: #d56416; box-shadow: inset 0 2px 4px alpha(#813907, 0.20); }
+entry { background: #ffffff; color: #37322d; border: 1px solid #ddd8d2; border-radius: 10px; padding: 10px 13px; box-shadow: inset 0 1px 2px alpha(#45301e, 0.03); transition: border-color 180ms ease, box-shadow 180ms ease; }
+entry:focus { border-color: #f69b59; box-shadow: 0 0 0 3px alpha(#ff9f4a, 0.17); }
+scrolledwindow { background: white; border: 1px solid #e4dfd9; border-radius: 10px; padding: 8px; }
+treeview { background: #ffffff; color: #514a43; border-radius: 0; -GtkTreeView-vertical-separator: 18; }
+treeview:selected { background: #fff0e2; color: #ae5114; }
+treeview header button { background: white; border: none; border-bottom: 1px solid #eee9e3; border-radius: 0; color: #514a43; font-size: 11px; box-shadow: none; padding: 10px 12px; }
+check { background: white; border: 1px solid #cbc4bd; border-radius: 5px; min-width: 17px; min-height: 17px; transition: background-color 180ms ease, border-color 180ms ease; }
+check:checked { background: #f58025; color: white; border-color: #f58025; }
+checkbutton { padding: 5px; }
+.apple-sheet { background: #faf9f7; border-radius: 0 0 12px 12px; }
+.apple-sheet headerbar { border-radius: 12px 12px 0 0; background: #faf9f7; border-bottom: none; padding: 16px 20px 3px; }
+.apple-sheet .dialog-vbox { background: transparent; border-radius: 0; padding: 8px 16px; }
+.apple-sheet .dialog-action-area { padding: 10px 14px 16px; }
+.apple-sheet .message-title { font-size: 20px; font-weight: 700; color: #37322d; }
+.apple-sheet .message-body { color: #514a43; }
+headerbar button.titlebutton { background: transparent; color: #3d3d3d; border: none; border-radius: 50%; min-width: 24px; min-height: 24px; padding: 2px; margin: 0 2px; box-shadow: none; }
+headerbar button.titlebutton:hover { background: #dedbd7; color: #242424; box-shadow: none; }
+headerbar button.titlebutton:active { background: #c9c5c0; box-shadow: none; }
+headerbar button.titlebutton.close { background: #e5e2de; }
+headerbar button.titlebutton.close:hover { background: #d3cfca; }
+headerbar button.titlebutton.close:active { background: #beb9b2; }
+*:focus { outline-color: alpha(#f58025, 0.35); outline-offset: 2px; }
+/* Round only the outside of a sheet; its title and body meet flush. */
+.apple-sheet box { border-top-left-radius: 0; border-top-right-radius: 0; }
+.apple-sheet > box { border-radius: 0 0 12px 12px; background: #faf9f7; }
+
+.list-columns { color: #514a43; border-bottom: 1px solid #eee9e3; }
+.latest-connection { color: #b85c20; font-size: 16px; }
+list { background: #ffffff; }
+list row { background: transparent; border-radius: 6px; border-bottom: 1px solid #f2efeb; }
+list row:selected { background: #fff0e2; color: #514a43; }
+list row:hover { background: #faf8f5; }
+button.row-connect, button.row-delete { box-shadow: none; }
+button.connect { background-color: #eee6de; color: #514239; border-color: #d8c9bb; box-shadow: none; }
+button.connect:hover { background-color: #e5d8cc; border-color: #c7b3a1; box-shadow: none; }
+button.connect:active { background-color: #d9c7b7; border-color: #baa18b; box-shadow: none; }

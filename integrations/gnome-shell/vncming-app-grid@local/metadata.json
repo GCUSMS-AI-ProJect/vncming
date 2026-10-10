@@ -1,0 +1,7 @@
+{
+  "uuid": "vncming-app-grid@local",
+  "name": "VNCMing in Applications",
+  "description": "Keep VNCMing visible in Show Applications while it is a favorite.",
+  "shell-version": ["42"],
+  "version": 1
+}

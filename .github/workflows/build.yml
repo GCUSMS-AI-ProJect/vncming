@@ -1,0 +1,27 @@
+name: Build and check
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: ./scripts/install-deps.sh
+      - name: Build viewer
+        run: ./scripts/build.sh
+      - name: Check source and validation
+        run: ./scripts/check.sh
+      - name: Check native message behavior
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a build/verify-native-messages
+      - name: Package and verify DEB
+        run: |
+          /usr/bin/python3 scripts/package_deb.py
+          /usr/bin/python3 tests/verify_deb.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vncming-ubuntu-22.04-amd64
+          path: |
+            dist/*.deb
+            dist/*.sha256
