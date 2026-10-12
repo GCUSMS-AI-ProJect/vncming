@@ -18,13 +18,14 @@ ENGINE = str(Path(__file__).resolve().parent.parent / 'build/vncviewer/vncviewer
 
 (Path(__file__).resolve().parent.parent / "build/test-results").mkdir(parents=True, exist_ok=True)
 
-def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
+def check(fullscreen, maximized=False, resize_supported=False, resolution=None, fixed_resolution=None, late_resize_supported=False):
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     listener.listen(1)
     port = listener.getsockname()[1]
     title = 'VNCMing Fit Test ' + str(port)
     points, errors, resize_requests = [], [], []
+    remote_dimensions = [800,600]
     def serve():
         try:
             with listener.accept()[0] as connection:
@@ -43,6 +44,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
                 colors = [b'\x00\x00\xff\x00', b'\x00\xff\x00\x00', b'\xff\x00\x00\x00', b'\xff\xff\xff\x00']
                 pixels = (colors[0]*400+colors[1]*400)*300 + (colors[2]*400+colors[3]*400)*300
                 sent = False
+                advertised = False
                 while True:
                     kind = read(1)[0]
                     if kind == 0: read(19)
@@ -52,11 +54,17 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
                         read(9)
                         if not sent:
                             extended = b''
-                            if resize_supported:
+                            if resize_supported and not late_resize_supported:
                                 extended = struct.pack('!HHHHi',0,0,800,600,-308)
                                 extended += b'\x01\x00\x00\x00'+struct.pack('!IHHHHI',0,0,0,800,600,0)
-                            connection.sendall(struct.pack('!BBH',0,0,2 if resize_supported else 1)+extended+struct.pack('!HHHHi',0,0,800,600,0)+pixels)
+                                advertised = True
+                            connection.sendall(struct.pack('!BBH',0,0,2 if extended else 1)+extended+struct.pack('!HHHHi',0,0,800,600,0)+pixels)
                             sent = True
+                        elif resize_supported and late_resize_supported and not advertised:
+                            extended = struct.pack('!HHHHi',0,0,800,600,-308)
+                            extended += b'\x01\x00\x00\x00'+struct.pack('!IHHHHI',0,0,0,800,600,0)
+                            connection.sendall(struct.pack('!BBH',0,0,1)+extended)
+                            advertised = True
                     elif kind == 4: read(7)
                     elif kind == 5:
                         mask,x,y = struct.unpack('!BHH',read(5))
@@ -68,6 +76,12 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
                         width,height,screens = struct.unpack('!HHB',read(5))
                         read(1); read(16*screens)
                         resize_requests.append((width,height))
+                        remote_dimensions[:] = [width,height]
+                        extended = struct.pack('!HHHHi',1,0,width,height,-308)
+                        extended += b'\x01\x00\x00\x00'+struct.pack('!IHHHHI',0,0,0,width,height,0)
+                        pixels = (colors[0]*(width//2)+colors[1]*(width-width//2))*(height//2)
+                        pixels += (colors[2]*(width//2)+colors[3]*(width-width//2))*(height-height//2)
+                        connection.sendall(struct.pack('!BBH',0,0,2)+extended+struct.pack('!HHHHi',0,0,width,height,0)+pixels)
                     else: raise AssertionError(kind)
         except (EOFError, ConnectionError): pass
         except Exception as error: errors.append(repr(error))
@@ -78,6 +92,8 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
     args.append('-Maximize=' + str(int(maximized)))
     if resolution:
         args.append('-FullScreenDesktopSize=%dx%d' % resolution)
+    if fixed_resolution:
+        args.append('-DesktopSize=%dx%d' % fixed_resolution)
     log = (Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.log').open('w')
     process = subprocess.Popen(args+['127.0.0.1::'+str(port)],stdout=log,stderr=log)
     try:
@@ -106,7 +122,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
                 assert tuple(data[offset:offset+3]) == expected, (width,height,x,y,tuple(data[offset:offset+3]))
             subprocess.run(['xdotool','windowactivate','--sync',window,'mousemove','--window',window,str(width//4),str(height//4),'click','1'],check=True)
             time.sleep(.2)
-            assert points and abs(points[-1][0]-200)<=2 and abs(points[-1][1]-150)<=2, points
+            assert points and abs(points[-1][0]-remote_dimensions[0]/4)<=2 and abs(points[-1][1]-remote_dimensions[1]/4)<=2, points
             return width,height
         dimensions=inspect()
         if fullscreen:
@@ -117,19 +133,27 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
             assert '_NET_WM_STATE_FULLSCREEN' not in state,state
             assert '_NET_WM_STATE_MAXIMIZED_VERT' in state,state
             assert '_NET_WM_STATE_MAXIMIZED_HORZ' in state,state
+            if fixed_resolution:
+                subprocess.run(['xdotool','windowsize',window,'600','450'],check=True)
+                time.sleep(1)
+                inspect()
         else:
             assert dimensions == (400,300),dimensions
             subprocess.run(['xdotool','windowsize',window,'600','450'],check=True)
             time.sleep(.7)
             assert inspect() == (600,450)
         assert not errors,errors
-        if resize_supported and fullscreen:
-            assert resize_requests and all(size == (resolution or (1920,1080)) for size in resize_requests),resize_requests
-        return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'complete_image':True,'pointer_mapping':True,'resize_requests':resize_requests}
+        if resize_supported and (fullscreen or fixed_resolution):
+            target = fixed_resolution or resolution or (1920,1080)
+            assert resize_requests and all(size == target for size in resize_requests),resize_requests
+            assert tuple(remote_dimensions) == target,remote_dimensions
+        return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'remote_dimensions':remote_dimensions,'complete_image':True,'pointer_mapping':True,'resize_requests':resize_requests}
     finally:
         process.terminate();process.wait(3)
         log.close()
 
 print(json.dumps([check(False),check(True),check(False, True),
                   check(True, resize_supported=True),
-                  check(True, resize_supported=True, resolution=(1600,900))]))
+                  check(True, resize_supported=True, resolution=(1600,900)),
+                  check(False, True, resize_supported=True, fixed_resolution=(1920,1080)),
+                  check(False, True, resize_supported=True, fixed_resolution=(1920,1080), late_resize_supported=True)]))

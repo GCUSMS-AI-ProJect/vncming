@@ -1235,6 +1235,16 @@ void DesktopWindow::handleDesktopSize()
 }
 
 
+void DesktopWindow::scheduleDesktopSize()
+{
+  if (strcmp(desktopSize, "") == 0 && !::remoteResize)
+    return;
+  if (!cc->server.supportsSetDesktopSize)
+    return;
+  Fl::remove_timeout(handleResizeTimeout, this);
+  Fl::add_timeout(0.5, handleResizeTimeout, this);
+}
+
 void DesktopWindow::handleResizeTimeout(void *data)
 {
   DesktopWindow *self = (DesktopWindow *)data;
@@ -1258,11 +1268,14 @@ void DesktopWindow::reconfigureFullscreen(void *data)
 
 void DesktopWindow::remoteResize(int width, int height)
 {
-  // Keep full-screen resolution independent of the local monitor dimensions.
-  // An explicit DesktopSize remains the caller's override.
-  if (fullscreen_active() && strcmp(desktopSize, "") == 0) {
+  // A fixed resolution must survive window resize events as well as startup.
+  // Without an explicit DesktopSize, full screen uses its configured size.
+  const char* requestedSize = desktopSize;
+  if (strcmp(requestedSize, "") == 0 && fullscreen_active())
+    requestedSize = fullScreenDesktopSize;
+  if (strcmp(requestedSize, "") != 0) {
     int requestedWidth, requestedHeight;
-    if (sscanf(fullScreenDesktopSize, "%dx%d", &requestedWidth, &requestedHeight) == 2 &&
+    if (sscanf(requestedSize, "%dx%d", &requestedWidth, &requestedHeight) == 2 &&
         requestedWidth > 0 && requestedWidth <= 65535 &&
         requestedHeight > 0 && requestedHeight <= 65535) {
       width = requestedWidth;

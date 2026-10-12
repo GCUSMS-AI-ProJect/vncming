@@ -160,7 +160,7 @@ CConn::~CConn()
 
 const char *CConn::connectionInfo()
 {
-  static char infoText[1024] = "";
+  static char infoText[2048] = "";
 
   char scratch[100];
   char pfStr[100];
@@ -184,6 +184,16 @@ const char *CConn::connectionInfo()
            _("Size: %d x %d"), server.width(), server.height());
   strcat(infoText, scratch);
   strcat(infoText, "\n");
+
+  if (strcmp(desktopSize, "") != 0) {
+    snprintf(scratch, sizeof(scratch), "请求分辨率：%.32s", (const char*)desktopSize);
+    strcat(infoText, scratch);
+    strcat(infoText, "\n");
+    snprintf(scratch, sizeof(scratch), "服务器调整分辨率：%s",
+             server.supportsSetDesktopSize ? "支持" : "不支持，需在远程设备设置");
+    strcat(infoText, scratch);
+    strcat(infoText, "\n");
+  }
 
   // TRANSLATORS: Will be filled in with a string describing the
   // protocol pixel format in a fairly language neutral way
@@ -342,6 +352,7 @@ void CConn::setDesktopSize(int w, int h)
 void CConn::setExtendedDesktopSize(unsigned reason, unsigned result,
                                    int w, int h, const rfb::ScreenSet& layout)
 {
+  bool previouslySupported = server.supportsSetDesktopSize;
   CConnection::setExtendedDesktopSize(reason, result, w, h, layout);
 
   if ((reason == reasonClient) && (result != resultSuccess)) {
@@ -350,6 +361,10 @@ void CConn::setExtendedDesktopSize(unsigned reason, unsigned result,
   }
 
   resizeFramebuffer();
+  if (!previouslySupported && server.supportsSetDesktopSize) {
+    vlog.info("Server advertised dynamic resolution support");
+    desktop->scheduleDesktopSize();
+  }
 }
 
 // setName() is called when the desktop name changes
@@ -386,6 +401,11 @@ void CConn::framebufferUpdateEnd()
 
   CConnection::framebufferUpdateEnd();
 
+  if (updateCount == 0) {
+    vlog.info("Initial remote desktop: %dx%d; dynamic resolution support: %s",
+              server.width(), server.height(),
+              server.supportsSetDesktopSize ? "yes" : "not yet advertised");
+  }
   updateCount++;
 
   // Calculate bandwidth everything managed to maintain during this update
@@ -491,6 +511,7 @@ void CConn::handleClipboardData(const char* data)
 
 void CConn::resizeFramebuffer()
 {
+  vlog.info("Remote desktop resolution is now %dx%d", server.width(), server.height());
   desktop->resizeFramebuffer(server.width(), server.height());
 }
 

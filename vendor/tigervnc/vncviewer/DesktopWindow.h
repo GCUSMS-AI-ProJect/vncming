@@ -85,6 +85,7 @@ public:
   virtual int handle(int event);
 
   void fullscreen_on();
+  void scheduleDesktopSize();
 
 private:
   static void menuOverlay(void *data);

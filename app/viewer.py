@@ -58,7 +58,7 @@ class Viewer(Gtk.Window):
         self.connect('destroy', Gtk.main_quit)
         self.entries = []
         self.approved_hostname_hosts = set()
-        self.options = {'FullScreen': False, 'Maximize': True, 'FitToWindow': True, 'RemoteResize': True, 'ViewOnly': False, 'Shared': True}
+        self.options = {'FullScreen': False, 'Maximize': True, 'FixedResolution': True, 'FitToWindow': True, 'RemoteResize': True, 'ViewOnly': False, 'Shared': True}
         self.children = {}
         self.pending_connections = {}
         self.connect('destroy', lambda *_: [self.cancel_pending(address)
@@ -329,7 +329,7 @@ class Viewer(Gtk.Window):
         box = dialog.get_content_area()
         box.set_border_width(18)
         checks = {}
-        for key, label in [('FullScreen', '以全屏模式打开'), ('Maximize', '连接后最大化窗口'), ('FitToWindow', '远程画面铺满窗口'), ('RemoteResize', '远程分辨率随窗口调整'), ('ViewOnly', '仅查看（不发送鼠标和键盘）'), ('Shared', '允许共享远程桌面')]:
+        for key, label in [('FullScreen', '以全屏模式打开'), ('Maximize', '连接后最大化窗口'), ('FixedResolution', '远程分辨率固定为 1920×1080'), ('FitToWindow', '远程画面铺满窗口'), ('RemoteResize', '远程分辨率随窗口调整（未固定时）'), ('ViewOnly', '仅查看（不发送鼠标和键盘）'), ('Shared', '允许共享远程桌面')]:
             checks[key] = Gtk.CheckButton(label=label)
             checks[key].set_active(self.options[key])
             box.pack_start(checks[key], False, False, 7)
@@ -360,7 +360,10 @@ class Viewer(Gtk.Window):
             if address in self.pending_connections:
                 self.pending_connections[address]['dialog'].present()
                 return
-            args = [ENGINE] + ['-' + key + '=' + str(int(value)) for key, value in self.options.items()] + [address]
+            args = [ENGINE] + ['-' + key + '=' + str(int(value)) for key, value in self.options.items() if key != 'FixedResolution']
+            if self.options['FixedResolution']:
+                args.append('-DesktopSize=1920x1080')
+            args.append(address)
             environment = os.environ.copy()
             environment['XMODIFIERS'] = '@im=none'
             environment.pop('VNC_PASSWORD', None)

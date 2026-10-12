@@ -49,6 +49,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     original_popen = viewer.subprocess.Popen
     def waiting_engine(args, **kwargs):
         assert '-FullScreen=0' in args and '-Maximize=1' in args, args
+        assert '-DesktopSize=1920x1080' in args and not any(arg.startswith('-FixedResolution') for arg in args), args
         return original_popen(['/bin/sleep', '30'], **kwargs)
     viewer.subprocess.Popen = waiting_engine
     original_message = window.message
