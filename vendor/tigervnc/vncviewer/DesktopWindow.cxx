@@ -798,6 +798,11 @@ int DesktopWindow::handle(int event)
   case FL_FULLSCREEN:
     fullScreen.setParam(fullscreen_active());
 
+    if (!firstUpdate && ::remoteResize && cc->server.supportsSetDesktopSize) {
+      Fl::remove_timeout(handleResizeTimeout, this);
+      Fl::add_timeout(0.5, handleResizeTimeout, this);
+    }
+
     // Update scroll bars
     repositionWidgets();
 
@@ -1253,6 +1258,17 @@ void DesktopWindow::reconfigureFullscreen(void *data)
 
 void DesktopWindow::remoteResize(int width, int height)
 {
+  // Keep full-screen resolution independent of the local monitor dimensions.
+  // An explicit DesktopSize remains the caller's override.
+  if (fullscreen_active() && strcmp(desktopSize, "") == 0) {
+    int requestedWidth, requestedHeight;
+    if (sscanf(fullScreenDesktopSize, "%dx%d", &requestedWidth, &requestedHeight) == 2 &&
+        requestedWidth > 0 && requestedWidth <= 65535 &&
+        requestedHeight > 0 && requestedHeight <= 65535) {
+      width = requestedWidth;
+      height = requestedHeight;
+    }
+  }
   ScreenSet layout;
   ScreenSet::const_iterator iter;
 

@@ -55,6 +55,7 @@ extern rfb::StringParameter fullScreenMode;
 extern rfb::BoolParameter fullScreenAllMonitors; // deprecated
 extern MonitorIndicesParameter fullScreenSelectedMonitors;
 extern rfb::StringParameter desktopSize;
+extern rfb::StringParameter fullScreenDesktopSize;
 extern rfb::StringParameter geometry;
 extern rfb::BoolParameter remoteResize;
 

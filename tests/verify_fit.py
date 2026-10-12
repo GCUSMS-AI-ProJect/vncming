@@ -18,13 +18,13 @@ ENGINE = str(Path(__file__).resolve().parent.parent / 'build/vncviewer/vncviewer
 
 (Path(__file__).resolve().parent.parent / "build/test-results").mkdir(parents=True, exist_ok=True)
 
-def check(fullscreen, maximized=False):
+def check(fullscreen, maximized=False, resize_supported=False, resolution=None):
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     listener.listen(1)
     port = listener.getsockname()[1]
     title = 'VNCMing Fit Test ' + str(port)
-    points, errors = [], []
+    points, errors, resize_requests = [], [], []
     def serve():
         try:
             with listener.accept()[0] as connection:
@@ -51,7 +51,11 @@ def check(fullscreen, maximized=False):
                     elif kind == 3:
                         read(9)
                         if not sent:
-                            connection.sendall(b'\x00\x00\x00\x01'+struct.pack('!HHHHi',0,0,800,600,0)+pixels)
+                            extended = b''
+                            if resize_supported:
+                                extended = struct.pack('!HHHHi',0,0,800,600,-308)
+                                extended += b'\x01\x00\x00\x00'+struct.pack('!IHHHHI',0,0,0,800,600,0)
+                            connection.sendall(struct.pack('!BBH',0,0,2 if resize_supported else 1)+extended+struct.pack('!HHHHi',0,0,800,600,0)+pixels)
                             sent = True
                     elif kind == 4: read(7)
                     elif kind == 5:
@@ -59,14 +63,21 @@ def check(fullscreen, maximized=False):
                         if mask & 1: points.append((x,y))
                     elif kind == 6:
                         read(3); read(struct.unpack('!I',read(4))[0])
+                    elif kind == 251:
+                        read(1)
+                        width,height,screens = struct.unpack('!HHB',read(5))
+                        read(1); read(16*screens)
+                        resize_requests.append((width,height))
                     else: raise AssertionError(kind)
         except (EOFError, ConnectionError): pass
         except Exception as error: errors.append(repr(error))
         finally: listener.close()
     threading.Thread(target=serve,daemon=True).start()
-    args = [ENGINE, '-RemoteResize=0', '-FitToWindow=1', '-geometry=400x300']
+    args = [ENGINE, '-RemoteResize='+str(int(resize_supported)), '-FitToWindow=1', '-geometry=400x300']
     args.append('-FullScreen=' + str(int(fullscreen)))
     args.append('-Maximize=' + str(int(maximized)))
+    if resolution:
+        args.append('-FullScreenDesktopSize=%dx%d' % resolution)
     log = (Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.log').open('w')
     process = subprocess.Popen(args+['127.0.0.1::'+str(port)],stdout=log,stderr=log)
     try:
@@ -112,9 +123,13 @@ def check(fullscreen, maximized=False):
             time.sleep(.7)
             assert inspect() == (600,450)
         assert not errors,errors
-        return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'complete_image':True,'pointer_mapping':True}
+        if resize_supported and fullscreen:
+            assert resize_requests and all(size == (resolution or (1920,1080)) for size in resize_requests),resize_requests
+        return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'complete_image':True,'pointer_mapping':True,'resize_requests':resize_requests}
     finally:
         process.terminate();process.wait(3)
         log.close()
 
-print(json.dumps([check(False),check(True),check(False, True)]))
+print(json.dumps([check(False),check(True),check(False, True),
+                  check(True, resize_supported=True),
+                  check(True, resize_supported=True, resolution=(1600,900))]))

@@ -10,7 +10,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('package', nargs='?', default=str(ROOT / 'dist/vncming_1.0.1_amd64.deb'))
+parser.add_argument('package', nargs='?', default=str(ROOT / 'dist/vncming_1.0.2_amd64.deb'))
 parser.add_argument('--gui', action='store_true')
 args = parser.parse_args()
 package = Path(args.package).resolve()

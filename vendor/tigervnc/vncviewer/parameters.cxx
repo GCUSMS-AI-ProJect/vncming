@@ -120,6 +120,9 @@ MonitorIndicesParameter fullScreenSelectedMonitors("FullScreenSelectedMonitors",
 StringParameter desktopSize("DesktopSize",
                             "Reconfigure desktop size on the server on "
                             "connect (if possible)", "");
+StringParameter fullScreenDesktopSize("FullScreenDesktopSize",
+                                     "Remote desktop resolution in full screen (if supported)",
+                                     "1920x1080");
 StringParameter geometry("geometry",
                          "Specify size and position of viewer window", "");
 
@@ -192,6 +195,7 @@ static VoidParameter* parameterArray[] = {
   &fullScreenMode,
   &fullScreenSelectedMonitors,
   &desktopSize,
+  &fullScreenDesktopSize,
   &remoteResize,
   &viewOnly,
   &shared,
