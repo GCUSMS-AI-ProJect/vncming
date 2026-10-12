@@ -6,7 +6,7 @@ Linux VNC 远程桌面客户端：GTK 连接管理界面 + 定制 TigerVNC 原�
 - 新建连接置顶，用户名与地址相同时更新已有记录，★ 标记最近保存的连接。
 - 双击列表编辑名称、IP地址、用户名和密码；每行可直接连接或删除。
 - 密码保存在系统钥匙环，使用私有管道传给客户端，不写入连接配置或命令行。
-- 默认全屏；远程分辨率随窗口调整，服务器不支持时使用本地缩放，并同步鼠标坐标。
+- 默认最大化窗口，保留标题栏和桌面面板；远程分辨率随窗口调整，服务器不支持时使用本地缩放，并同步鼠标坐标。
 - F8 打开远程连接菜单，可切换全屏、查看连接信息和修改连接选项。
 
 ## Clone 和安装
@@ -40,14 +40,14 @@ cd vncming
 ```bash
 ./scripts/install-deps.sh
 ./scripts/build-deb.sh
-sudo apt install ./dist/vncming_1.0.0_amd64.deb
+sudo apt install ./dist/vncming_1.0.1_amd64.deb
 vncming
 ```
 
 安装包包含编译好的客户端、GTK 界面、橙色图标、应用菜单入口及对应源码，
 安装时自动处理运行依赖，无需在目标机器编译。包安装到 `/usr/lib/vncming`，
 命令入口为 `/usr/bin/vncming`；卸载可运行 `sudo apt remove vncming`，个人连接配置和钥匙环不会删除。
-源码内保留打包脚本，可用 `./scripts/build-deb.sh --version 1.0.1` 构建新版本。
+源码内保留打包脚本，可用 `./scripts/build-deb.sh --version 1.0.2` 构建新版本。
 
 本机若已运行 `./install.sh`，用户级菜单入口与 `~/.local/bin/vncming` 会继续使用源码目录。
 可用 `/usr/bin/vncming` 明确启动 DEB 版本。不要用 root 启动图形界面。

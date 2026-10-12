@@ -18,7 +18,7 @@ ENGINE = str(Path(__file__).resolve().parent.parent / 'build/vncviewer/vncviewer
 
 (Path(__file__).resolve().parent.parent / "build/test-results").mkdir(parents=True, exist_ok=True)
 
-def check(fullscreen):
+def check(fullscreen, maximized=False):
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     listener.listen(1)
@@ -66,6 +66,7 @@ def check(fullscreen):
     threading.Thread(target=serve,daemon=True).start()
     args = [ENGINE, '-RemoteResize=0', '-FitToWindow=1', '-geometry=400x300']
     args.append('-FullScreen=' + str(int(fullscreen)))
+    args.append('-Maximize=' + str(int(maximized)))
     log = (Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.log').open('w')
     process = subprocess.Popen(args+['127.0.0.1::'+str(port)],stdout=log,stderr=log)
     try:
@@ -100,15 +101,20 @@ def check(fullscreen):
         if fullscreen:
             state=subprocess.run(['xprop','-id',window,'_NET_WM_STATE'],capture_output=True,text=True).stdout
             assert '_NET_WM_STATE_FULLSCREEN' in state,state
+        elif maximized:
+            state=subprocess.run(['xprop','-id',window,'_NET_WM_STATE'],capture_output=True,text=True).stdout
+            assert '_NET_WM_STATE_FULLSCREEN' not in state,state
+            assert '_NET_WM_STATE_MAXIMIZED_VERT' in state,state
+            assert '_NET_WM_STATE_MAXIMIZED_HORZ' in state,state
         else:
             assert dimensions == (400,300),dimensions
             subprocess.run(['xdotool','windowsize',window,'600','450'],check=True)
             time.sleep(.7)
             assert inspect() == (600,450)
         assert not errors,errors
-        return {'fullscreen':fullscreen,'dimensions':dimensions,'complete_image':True,'pointer_mapping':True}
+        return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'complete_image':True,'pointer_mapping':True}
     finally:
         process.terminate();process.wait(3)
         log.close()
 
-print(json.dumps([check(False),check(True)]))
+print(json.dumps([check(False),check(True),check(False, True)]))

@@ -28,7 +28,7 @@ def copy(source, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='1.0.0')
+    parser.add_argument('--version', default='1.0.1')
     args = parser.parse_args()
     subprocess.run(['dpkg', '--validate-version', args.version], check=True)
     architecture = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()

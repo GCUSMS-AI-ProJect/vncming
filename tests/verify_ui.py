@@ -64,7 +64,7 @@ def serve():
  finally: server.close()
 threading.Thread(target=serve,daemon=True).start()
 log=(OUTPUT/'ui-check.log').open('w')
-proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,env={**os.environ,"XMODIFIERS":"@im=none"})
+proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen=0','-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,env={**os.environ,"XMODIFIERS":"@im=none"})
 def find(title):
  import re
  for _ in range(100):

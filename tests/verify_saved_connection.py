@@ -19,7 +19,10 @@ result = {}
 with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     viewer.DATA = Path(temporary) / 'connections.json'
     viewer.LEGACY_DATA = Path(temporary) / 'legacy.json'
+    viewer.DATA.write_text(json.dumps({'options': {'FullScreen': True}, 'connections': []}))
     window = viewer.Viewer()
+    assert window.options['FullScreen'] is False and window.options['Maximize'] is True
+    result['legacy_fullscreen_migrated_to_maximized'] = True
     window.entries = [{'name': 'UI Test', 'address': '127.0.0.1'}]
     window.refresh()
     original_dialog = window.connection_dialog
@@ -45,6 +48,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
 
     original_popen = viewer.subprocess.Popen
     def waiting_engine(args, **kwargs):
+        assert '-FullScreen=0' in args and '-Maximize=1' in args, args
         return original_popen(['/bin/sleep', '30'], **kwargs)
     viewer.subprocess.Popen = waiting_engine
     original_message = window.message

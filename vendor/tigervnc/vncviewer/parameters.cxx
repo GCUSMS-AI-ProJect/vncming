@@ -104,8 +104,8 @@ IntParameter qualityLevel("QualityLevel",
                           "JPEG quality level. 0 = Low, 9 = High",
                           8);
 
-BoolParameter maximize("Maximize", "Maximize viewer window", false);
-BoolParameter fullScreen("FullScreen", "Enable full screen", true);
+BoolParameter maximize("Maximize", "Maximize viewer window", true);
+BoolParameter fullScreen("FullScreen", "Enable full screen", false);
 BoolParameter fitToWindow("FitToWindow", "Fit the complete remote desktop to the window", true);
 StringParameter fullScreenMode("FullScreenMode", "Specify which monitors to use when in full screen. "
                                                  "Should be either Current, Selected or All",
