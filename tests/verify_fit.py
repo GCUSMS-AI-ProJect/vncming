@@ -19,7 +19,7 @@ ENGINE = str(Path(__file__).resolve().parent.parent / 'build/vncviewer/vncviewer
 
 (Path(__file__).resolve().parent.parent / "build/test-results").mkdir(parents=True, exist_ok=True)
 
-def check(fullscreen, maximized=False, resize_supported=False, resolution=None, fixed_resolution=None, late_resize_supported=False):
+def check(fullscreen, maximized=False, resize_supported=False, resolution=None, fixed_resolution=None, late_resize_supported=False, dynamic_resolution=False):
     listener = socket.socket()
     listener.bind(('127.0.0.1', 0))
     listener.listen(1)
@@ -98,6 +98,8 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
     args.append('-Maximize=' + str(int(maximized)))
     if resolution:
         args.append('-FullScreenDesktopSize=%dx%d' % resolution)
+    if dynamic_resolution:
+        args.append('-FullScreenDesktopSize=')
     if fixed_resolution:
         args.append('-DesktopSize=%dx%d' % fixed_resolution)
     log = (Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.log').open('w')
@@ -160,8 +162,10 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             assert inspect() == (600,450)
         assert not errors,errors
         if resize_supported and (fullscreen or fixed_resolution):
-            target = fixed_resolution or resolution or (1920,1080)
-            assert resize_requests and all(size == target for size in resize_requests),resize_requests
+            target = (dimensions[0], dimensions[1] - (44 if '--toolbar' in sys.argv else 0)) if dynamic_resolution else (fixed_resolution or resolution or (1920,1080))
+            assert resize_requests and resize_requests[-1] == target,resize_requests
+            if not dynamic_resolution:
+                assert all(size == target for size in resize_requests),resize_requests
             assert tuple(remote_dimensions) == target,remote_dimensions
         return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'remote_dimensions':remote_dimensions,'complete_image':True,'pointer_mapping':True,'resize_requests':resize_requests}
     finally:
@@ -172,4 +176,5 @@ print(json.dumps([check(False),check(True),check(False, True),
                   check(True, resize_supported=True),
                   check(True, resize_supported=True, resolution=(1600,900)),
                   check(False, True, resize_supported=True, fixed_resolution=(1920,1080)),
-                  check(False, True, resize_supported=True, fixed_resolution=(1920,1080), late_resize_supported=True)]))
+                  check(False, True, resize_supported=True, fixed_resolution=(1920,1080), late_resize_supported=True),
+                  check(True, resize_supported=True, dynamic_resolution=True)]))

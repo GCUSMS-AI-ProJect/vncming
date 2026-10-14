@@ -32,9 +32,9 @@ menu.desktop-submenu > menuitem:hover { background: @theme_selected_bg_color; co
 window.popup { background: transparent; border: none; border-radius: 0; }
 window.popup decoration { background: transparent; border-radius: 10px; box-shadow: 0 4px 12px alpha(@ink, 0.12); }
 .toolbar { background: @canvas; padding: 14px 24px 8px; }
-.section { color: @ink; font-size: 21px; font-weight: 700; }
+.section { color: @ink; font-size: 18px; font-weight: 600; }
 .muted { color: @muted; font-size: 12px; }
-.count-badge { background: #eee9e3; color: @secondary; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.count-badge { color: @muted; font-size: 12px; padding: 0 2px; }
 .empty-title { color: @ink; font-size: 22px; font-weight: 700; }
 .group-title { color: @ink; font-size: 14px; font-weight: 600; }
 
@@ -45,14 +45,21 @@ button:disabled { color: #b5afa9; background-color: #f2efeb; border-color: @line
 button.connect, button.suggested-action { background-color: @accent; color: white; border-color: #eb7520; font-weight: 600; }
 button.connect:hover, button.suggested-action:hover { background-color: @accent_hover; border-color: #f58a36; }
 button.connect:active, button.suggested-action:active { background-color: #dc6817; border-color: #d56416; }
-button.row-connect { background-color: @tint; color: @accent_ink; border-color: #f1d5bf; }
+button.row-connect { background-color: white; color: @secondary; border-color: @line; padding: 7px 12px; }
 button.row-connect:hover { background-color: #ffe2c9; border-color: #ed995a; }
-button.row-delete { background: transparent; color: @muted; border-color: transparent; }
+button.row-delete { background: transparent; color: @muted; border-color: transparent; padding: 7px 8px; }
 button.row-delete:hover { background: #fbece8; color: #a44834; border-color: #edc9c0; }
 button.row-delete:active { background: #f5dbd3; }
 entry { background: white; color: @ink; border: 1px solid @line; border-radius: 9px; padding: 10px 13px; box-shadow: none; transition: border-color 140ms ease, box-shadow 140ms ease; }
 entry:focus { border-color: #f69b59; box-shadow: 0 0 0 2px alpha(@accent, 0.12); }
 entry selection { background: @tint; color: @ink; }
+.validation-error { color: #a44834; font-size: 12px; }
+button.destructive-action { background: #b84736; color: white; border-color: #b84736; }
+button.destructive-action:hover { background: #a33c2c; }
+combobox button { padding: 8px 10px; }
+expander { color: @secondary; }
+button.path-action { padding: 7px 8px; background: transparent; border-color: transparent; }
+button.path-action:hover { background: @tint; border-color: @line; }
 *:focus { outline-color: alpha(@accent, 0.35); outline-offset: 2px; }
 check { background: white; border: 1px solid #cbc4bd; border-radius: 5px; min-width: 17px; min-height: 17px; }
 check:checked { background: @accent; color: white; border-color: @accent; }

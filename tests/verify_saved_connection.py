@@ -42,10 +42,49 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     window.entries.append({'name': 'Delete Test', 'address': '127.0.0.2'})
     window.refresh()
     window.table.select_row(window.table.get_row_at_index(0))
+    def delete_response(response):
+        def respond():
+            for dialog in Gtk.Window.list_toplevels():
+                if isinstance(dialog, Gtk.Dialog) and dialog.get_title() == '删除连接？' and dialog.get_visible():
+                    dialog.response(response)
+            return False
+        GLib.timeout_add(100, respond)
+    delete_response(Gtk.ResponseType.CANCEL)
+    window.table.get_row_at_index(1).get_child().get_children()[-1].get_children()[1].clicked()
+    assert len(window.entries) == 2, 'Cancelling deletion must preserve the device'
+    delete_response(Gtk.ResponseType.OK)
     window.table.get_row_at_index(1).get_child().get_children()[-1].get_children()[1].clicked()
     assert [entry['name'] for entry in window.entries] == ['UI Test']
     assert json.loads(viewer.DATA.read_text())['connections'] == window.entries
     result['row_actions'] = True
+    result['delete_confirmation'] = True
+
+    def walk(widget):
+        yield widget
+        if isinstance(widget, Gtk.Container):
+            for child in widget.get_children():
+                yield from walk(child)
+    original_options = window.options.copy()
+    for opening, resolution in [('fullscreen', 'dynamic'), ('normal', 'server'), ('maximized', 'fixed')]:
+        def set_options():
+            for dialog in Gtk.Window.list_toplevels():
+                if isinstance(dialog, Gtk.Dialog) and dialog.get_title() == '连接选项' and dialog.get_visible():
+                    combos = [w for w in walk(dialog) if isinstance(w, Gtk.ComboBoxText)]
+                    combos.sort(key=lambda field: field.get_parent().child_get_property(field, 'top-attach'))
+                    assert len(combos) == 2
+                    combos[0].set_active_id(opening)
+                    combos[1].set_active_id(resolution)
+                    dialog.response(Gtk.ResponseType.OK)
+            return False
+        GLib.timeout_add(100, set_options)
+        window.show_options()
+        assert window.options['FullScreen'] == (opening == 'fullscreen')
+        assert window.options['Maximize'] == (opening == 'maximized')
+        assert window.options['FixedResolution'] == (resolution == 'fixed')
+        assert window.options['RemoteResize'] == (resolution == 'dynamic')
+    window.options = original_options
+    window.save()
+    result['exclusive_window_and_resolution_modes'] = True
 
     original_popen = viewer.subprocess.Popen
     def waiting_engine(args, **kwargs):
@@ -59,6 +98,8 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     try:
         window.start_connection('127.0.0.1::5999')
         pending = window.pending_connections['127.0.0.1::5999']
+        window.address.set_text('127.0.0.1::5999')
+        assert not window.connect_button.get_sensitive()
         window.start_connection('127.0.0.1::5999')
         assert len(window.children) == 1
         pending['started'] -= 11000000
@@ -66,6 +107,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         pending['process'].wait(3)
         assert len(messages) == 1 and '连接超时' in messages[0]
         assert not window.pending_connections
+        assert window.connect_button.get_sensitive()
         assert not pending['dialog'].get_visible()
         assert window.poll_pending('127.0.0.1::5999') is False
         assert len(messages) == 1
@@ -74,6 +116,29 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     finally:
         viewer.subprocess.Popen = original_popen
         window.message = original_message
+
+    # Fullscreen dynamic sizing must override the engine's historical fixed
+    # fullscreen default, so the selected mode reaches the native process.
+    captured = []
+    def capture_launch(args, **kwargs):
+        captured.append(args)
+        return original_popen(['/bin/sleep', '30'], **kwargs)
+    viewer.subprocess.Popen = capture_launch
+    try:
+        window.options.update(FullScreen=True, Maximize=False, FixedResolution=False, RemoteResize=True)
+        window.start_connection('127.0.0.1::5998')
+        process = window.pending_connections['127.0.0.1::5998']['process']
+        assert '-FullScreenDesktopSize=' in captured[-1]
+        assert '-RemoteResize=1' in captured[-1]
+        assert '-FullScreen=1' in captured[-1] and '-Maximize=0' in captured[-1]
+        assert '-DesktopSize=1920x1080' not in captured[-1]
+        window.cancel_pending('127.0.0.1::5998')
+        process.wait(3)
+        window.poll_child(process, '127.0.0.1::5998')
+        result['dynamic_fullscreen_launch_parameters'] = True
+    finally:
+        window.options = original_options
+        viewer.subprocess.Popen = original_popen
 
     # A real native connection error must stop the launcher timeout even while
     # its own error dialog remains open beyond the ten-second deadline.
@@ -147,7 +212,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         assert json.loads(viewer.DATA.read_text())['connections'][0] == saved
         row = window.table.get_row_at_index(0)
         marker = row.get_child().get_children()[0].get_children()[-1]
-        assert marker.get_label() == '最近'
+        assert marker.get_label() == '最近保存'
         result['newest_first_and_username_address_deduplication'] = True
         server = socket.socket()
         server.bind(('127.0.0.1', 0))

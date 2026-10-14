@@ -131,7 +131,7 @@ CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
       vlog.error("%s", e.str());
       // The native error dialog owns this failure; stop the launcher's timer.
       notifyLauncherConnection('0');
-      abort_connection(_("Failed to connect to \"%s\":\n\n%s"),
+      abort_connection(_("无法连接到 \"%s\"：\n\n%s"),
                        vncServerName, e.str());
       return;
     }

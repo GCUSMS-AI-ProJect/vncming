@@ -37,6 +37,17 @@ with tempfile.TemporaryDirectory() as temporary:
     surface = window.get_window()
     output = Path(__file__).resolve().parent.parent / 'build/test-results'
     Gdk.pixbuf_get_from_window(Gdk.get_default_root_window(), *surface.get_origin()[-2:], surface.get_width(), surface.get_height()).savev(str(output / 'connections-theme.png'), 'png', [], [])
+    row = window.table.get_row_at_index(0)
+    x, y = row.translate_coordinates(window, 30, 20)
+    origin = window.get_window().get_origin()[-2:]
+    subprocess.run(['xdotool', 'mousemove', str(origin[0] + x), str(origin[1] + y), 'click', '3'], check=True)
+    pump()
+    menus = Gtk.Menu.get_for_attach_widget(row)
+    assert menus and menus[0].get_visible(), 'Right-click connection menu did not open'
+    assert [item.get_label() for item in menus[0].get_children()] == ['连接', '编辑连接…', '删除连接…']
+    menus[0].popdown()
+    window.address.grab_focus()
+    pump()
     suggestions = window.suggestions
     def search(query, expected):
         window.address.set_text(query)

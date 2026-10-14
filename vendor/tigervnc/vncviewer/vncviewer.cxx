@@ -211,8 +211,8 @@ static void mainloop(const char* vncserver, network::Socket* sock)
     if(reconnectOnError && (sock == NULL)) {
       int ret;
       ret = vncChoice(_("%s\n\n"
-                        "Attempt to reconnect?"),
-                      NULL, fl_yes, fl_no, exitError);
+                        "是否重新连接？"),
+                      NULL, "重新连接", "关闭", exitError);
       free(exitError);
       exitError = NULL;
       if (ret == 1)

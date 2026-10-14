@@ -22,6 +22,7 @@
 #endif
 
 #include <assert.h>
+#include <string>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
@@ -599,7 +600,12 @@ void DesktopWindow::draw()
     fl_pie(16, 18, 8, 8, 0, 360);
     fl_color(fl_rgb_color(81, 74, 67));
     fl_font(FL_HELVETICA, 14);
-    fl_draw("已连接", 32, 0, std::max(0, w()-180), toolbarHeight(), FL_ALIGN_LEFT);
+    const char* address = getenv("VNCMING_TRANSFER_ADDRESS");
+    std::string status = "已连接";
+    if (address && *address) status += std::string(" · ") + address;
+    fl_push_clip(32, 0, std::max(0, w()-100), toolbarHeight());
+    fl_draw(status.c_str(), 32, 0, std::max(0, w()-100), toolbarHeight(), FL_ALIGN_LEFT);
+    fl_pop_clip();
     draw_child(*transferButton);
     fl_pop_clip();
   }
