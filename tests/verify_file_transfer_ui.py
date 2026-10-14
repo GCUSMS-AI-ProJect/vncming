@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory() as temporary:
     window = TransferWindow(launcher, entry)
     assert window.task_stack.get_visible_child_name() == 'empty'
     assert not any(action.get_sensitive() for action in window.task_actions.values())
-    window.remote = LocalFiles()
+    window.remote = window.browse_remote = LocalFiles()
     window.state.set_text('已连接 · 本地测试端点')
     window.other.set_sensitive(True)
     window.local.load(str(source)); window.other.load(str(remote))
@@ -85,6 +85,12 @@ with tempfile.TemporaryDirectory() as temporary:
     # same row after cleanup and verify that it completes on the local fixture.
     gate = threading.Event()
     window.submit(lambda: gate.wait(5))
+    # Browsing must complete while a transfer worker is blocked.
+    window.other.load(str(remote / folder.name))
+    until(lambda: window.other.path == str(remote / folder.name))
+    assert not gate.is_set()
+    window.other.parent()
+    until(lambda: window.other.path == str(remote))
     window.enqueue([str(folder)], True)
     assert window.task_model[0][7] == '取消'
     assert not window.connection_actions['重新连接…'].get_sensitive()
@@ -118,8 +124,21 @@ with tempfile.TemporaryDirectory() as temporary:
     GLib.timeout_add(400, dismiss_login)
     window.login()
     original_connect = file_transfer.connect
+    class FixtureSFTP:
+        def get_channel(self): return self
+        def settimeout(self, value): pass
+        def normalize(self, path): return str(remote) if path == '.' else path
+        def listdir_attr(self, path):
+            import paramiko
+            result = []
+            for name, info in LocalFiles().listing(path):
+                item = paramiko.SFTPAttributes.from_stat(info)
+                item.filename = name
+                result.append(item)
+            return result
     class FixtureClient:
         def close(self): pass
+        def open_sftp(self): return FixtureSFTP()
     class FixtureRemote(LocalFiles):
         def normalize(self, path):
             return str(remote) if path == '.' else super().normalize(path)
@@ -140,6 +159,39 @@ with tempfile.TemporaryDirectory() as temporary:
         assert not window.upload.get_sensitive() and not window.download.get_sensitive()
     finally:
         file_transfer.connect = original_connect
+    # Discard queued obsolete reads and ignore errors from superseded paths.
+    started, release = threading.Event(), threading.Event()
+    calls = []
+    class SlowFiles(LocalFiles):
+        def listing(self, path):
+            calls.append(path)
+            if path == str(source):
+                started.set()
+                release.wait(5)
+                raise OSError('obsolete read failure')
+            return super().listing(path)
+    window.browse_remote = SlowFiles()
+    window.other.load(str(source))
+    assert started.wait(2)
+    window.other.load(str(output))
+    window.other.load(str(remote))
+    release.set()
+    until(lambda: window.other.path == str(remote) and not window.other.loading)
+    assert calls == [str(source), str(remote)], calls
+    assert '失败' not in window.other.note.get_text()
+    # Large directories reuse two decoded SVGs, and render in GTK idle batches.
+    large = root / 'large'
+    large.mkdir()
+    for index in range(1500): (large / f'{index:04}.txt').touch()
+    (large / 'folder').mkdir()
+    file_transfer.icon_pixbuf.cache_clear()
+    began = time.monotonic()
+    window.local.load(str(large))
+    until(lambda: window.local.path == str(large) and not window.local.loading)
+    elapsed = time.monotonic() - began
+    assert len(window.local.model) == 1501
+    assert file_transfer.icon_pixbuf.cache_info().misses == 2
+    print(f'1501 directory entries rendered in {elapsed:.3f}s; only 2 SVG decodes')
     window.destroy()
     GLib.idle_add(lambda: launcher.destroy())
     Gtk.main()

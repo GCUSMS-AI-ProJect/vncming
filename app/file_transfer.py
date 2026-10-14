@@ -1,5 +1,6 @@
 """Ubuntu-style two-pane SFTP browser and asynchronous transfer queue."""
 import os
+from functools import lru_cache
 import queue
 import stat
 import threading
@@ -8,18 +9,22 @@ from pathlib import Path
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 import credentials
 from motion import AnimatedDialog
-from file_transport import LocalFiles, Cancelled, connect, ssh_host, safe_name, transfer
+from file_transport import RemoteFiles, LocalFiles, Cancelled, connect, ssh_host, safe_name, transfer
 
 ROOT = Path(__file__).resolve().parent.parent
 ACTIVE_TASKS = ('等待中', '正在传输', '正在取消')
 
 
-def icon(name, size=20):
+@lru_cache(maxsize=64)
+def icon_pixbuf(name, size=20):
     path = ROOT / 'assets/transfer' / (name + '.svg')
     if not path.exists():
         path = ROOT / 'assets/actions' / (name + '.svg')
-    return Gtk.Image.new_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
-        str(path), size, size, True))
+    return GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)
+
+
+def icon(name, size=20):
+    return Gtk.Image.new_from_pixbuf(icon_pixbuf(name, size))
 
 
 def button(label, symbol, callback):
@@ -73,6 +78,10 @@ class Browser(Gtk.Box):
     def __init__(self, owner, remote):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.owner, self.remote, self.path, self.generation = owner, remote, None, 0
+        self.loading = False
+        self.operations = queue.Queue()
+        self.worker_thread = threading.Thread(target=self.worker, name="vncming-browse-" + str(remote))
+        self.worker_thread.start()
         heading = Gtk.Box(spacing=8)
         heading.pack_start(icon('server' if remote else 'monitor'), False, False, 0)
         name = Gtk.Label(label=owner.entry.get('name', '') if remote else '本机', xalign=0, ellipsize=3)
@@ -139,52 +148,100 @@ class Browser(Gtk.Box):
         self.path_buttons[1].set_sensitive(bool(self.path))
         self.menu_actions['新建文件夹…'].set_sensitive(bool(self.path))
 
-    def load(self, path):
+    def worker(self):
+        while True:
+            operation = self.operations.get()
+            if operation is None:
+                return
+            if not self.owner.closed:
+                operation()
+
+    def files(self):
+        return self.owner.browse_remote if self.remote else LocalFiles()
+
+    def load(self, path, canonical=False):
+        if self.owner.closed:
+            return
         self.generation += 1
         generation = self.generation
+        files = self.files()
+        self.loading = True
+        self.view.set_sensitive(False)
         self.note.set_text('正在读取…')
-        def read():
-            files = self.owner.remote if self.remote else LocalFiles()
-            normalized = files.normalize(path)
-            items = sorted(files.listing(normalized), key=lambda item: (not stat.S_ISDIR(item[1].st_mode), item[0].casefold()))
-            for name, _ in items:
-                safe_name(name)
-            def show():
-                if self.owner.closed or generation != self.generation:
-                    return
-                self.path = normalized
-                self.location.set_text(normalized)
-                self.model.clear()
-                for name, info in items:
-                    directory = stat.S_ISDIR(info.st_mode)
-                    image = icon('folder' if directory else 'file').get_pixbuf()
-                    self.model.append([image, name, '文件夹' if directory else human_size(info.st_size),
-                        time.strftime('%Y-%m-%d %H:%M', time.localtime(info.st_mtime)), files.join(normalized, name), directory])
-                self.note.set_text(f'{len(items)} 个项目 · 双击文件夹进入')
+        self.menu_actions['新建文件夹…'].set_sensitive(False)
+        self.owner.update_transfer_actions()
+        def current():
+            return not self.owner.closed and generation == self.generation
+        def failed(message):
+            if current():
+                self.loading = False
+                self.view.set_sensitive(True)
+                self.note.set_text('操作失败：' + message)
                 self.update_path_actions()
                 self.owner.update_transfer_actions()
+        def read():
+            if not current():
+                return
+            try:
+                normalized = path if canonical else files.normalize(path)
+                items = sorted(files.listing(normalized), key=lambda item: (not stat.S_ISDIR(item[1].st_mode), item[0].casefold()))
+                rows = []
+                for name, info in items:
+                    safe_name(name)
+                    directory = stat.S_ISDIR(info.st_mode)
+                    rows.append((name, directory, '文件夹' if directory else human_size(info.st_size),
+                        time.strftime('%Y-%m-%d %H:%M', time.localtime(info.st_mtime)), files.join(normalized, name)))
+            except Exception as error:
+                GLib.idle_add(failed, str(error))
+                return
+            def show():
+                if not current():
+                    return False
+                model = Gtk.ListStore(GdkPixbuf.Pixbuf, str, str, str, str, bool)
+                iterator = iter(rows)
+                def append_batch():
+                    if not current():
+                        return False
+                    for _ in range(100):
+                        row = next(iterator, None)
+                        if row is None:
+                            self.model = model
+                            self.view.set_model(model)
+                            self.path = normalized
+                            self.location.set_text(normalized)
+                            self.loading = False
+                            self.view.set_sensitive(True)
+                            self.note.set_text(f'{len(items)} 个项目 · 双击文件夹进入')
+                            self.update_path_actions()
+                            self.owner.update_transfer_actions()
+                            return False
+                        name, directory, size, modified, fullpath = row
+                        model.append([icon_pixbuf('folder' if directory else 'file'), name, size, modified, fullpath, directory])
+                    return True
+                GLib.idle_add(append_batch)
+                return False
             GLib.idle_add(show)
-        self.owner.submit(read, self.note)
+        self.operations.put(read)
 
     def refresh(self, *_):
         if self.path:
-            self.load(self.path)
+            self.load(self.path, canonical=True)
 
     def parent(self, *_):
         if self.path:
             files = self.owner.remote if self.remote else LocalFiles()
-            self.load(files.parent(self.path) or '/')
+            self.load(files.parent(self.path) or '/', canonical=True)
 
     def open_row(self, _, path, column):
         if self.model[path][5]:
-            self.load(self.model[path][4])
+            self.load(self.model[path][4], canonical=True)
 
     def selected(self):
         model, paths = self.view.get_selection().get_selected_rows()
         return [model[path][4] for path in paths]
 
     def new_folder(self, *_):
-        if not self.path:
+        if not self.path or self.loading:
             return
         dialog = AnimatedDialog(title='新建文件夹', transient_for=self.owner, modal=True)
         field = Gtk.Entry(margin=20)
@@ -196,9 +253,19 @@ class Browser(Gtk.Box):
         if dialog.run() == Gtk.ResponseType.OK:
             try:
                 name = safe_name(field.get_text().strip())
-                files = self.owner.remote if self.remote else LocalFiles()
+                files = self.files()
                 target = files.join(self.path, name)
-                self.owner.submit(lambda: (files.mkdir(target), GLib.idle_add(self.refresh)), self.note)
+                generation = self.generation
+                def create():
+                    try:
+                        files.mkdir(target)
+                        GLib.idle_add(self.refresh)
+                    except Exception as error:
+                        def failed(message=str(error)):
+                            if not self.owner.closed and generation == self.generation:
+                                self.note.set_text('操作失败：' + message)
+                        GLib.idle_add(failed)
+                self.operations.put(create)
             except ValueError as error:
                 self.note.set_text(str(error))
         dialog.destroy()
@@ -214,7 +281,7 @@ class Browser(Gtk.Box):
             except (GLib.Error, ValueError):
                 Gtk.drag_finish(context, False, False, timestamp)
                 return
-        accepted = bool(paths and self.path and self.owner.remote)
+        accepted = bool(paths and self.path and self.owner.remote and not self.loading)
         if accepted:
             self.owner.enqueue(paths, True)
         Gtk.drag_finish(context, accepted, False, timestamp)
@@ -230,7 +297,7 @@ class TransferWindow(Gtk.Window):
         self.get_style_context().add_class('transfer-window')
         self.closed = False
         self.connecting = False
-        self.remote = self.client = None
+        self.remote = self.client = self.browse_remote = None
         self.operations = queue.Queue()
         self.tasks = []
         self.waiters = []
@@ -320,6 +387,8 @@ class TransferWindow(Gtk.Window):
                 GLib.idle_add(show)
         if self.client:
             self.client.close()
+        self.local.worker_thread.join()
+        self.other.worker_thread.join()
 
     def submit(self, callback, target=None):
         if not self.closed:
@@ -329,8 +398,8 @@ class TransferWindow(Gtk.Window):
         if self.closed or not hasattr(self, 'other'):
             return
         connected = self.remote is not None and not self.connecting
-        self.upload.set_sensitive(bool(connected and self.other.path and self.local.selected()))
-        self.download.set_sensitive(bool(connected and self.local.path and self.other.selected()))
+        self.upload.set_sensitive(bool(connected and self.other.path and not self.other.loading and not self.local.loading and self.local.selected()))
+        self.download.set_sensitive(bool(connected and self.local.path and not self.local.loading and not self.other.loading and self.other.selected()))
         self.login_button.set_label('正在连接…' if self.connecting else '连接')
         self.login_button.set_visible(not connected)
         self.login_button.set_sensitive(not self.connecting)
@@ -443,6 +512,7 @@ class TransferWindow(Gtk.Window):
         self.connecting = True
         self.state.set_text('正在连接…')
         self.other.set_sensitive(False)
+        self.other.generation += 1
         self.other.path = None
         self.other.model.clear()
         self.other.location.set_text('')
@@ -451,22 +521,27 @@ class TransferWindow(Gtk.Window):
             try:
                 if self.client:
                     self.client.close()
-                self.client = self.remote = None
+                self.client = self.remote = self.browse_remote = None
                 def approve(hostname, fingerprint):
                     return self.ask('确认远程设备身份', hostname + '\n\n主机指纹\n' + fingerprint + '\n\n请核对后再信任此设备。', [('取消', False), ('信任并连接', True)]) is True
                 self.client, self.remote = connect(host, port, user, password, approve)
+                # A distinct session avoids sharing SFTP request/response state
+                # between the transfer worker and the browser worker.
+                channel = self.client.open_sftp()
+                channel.get_channel().settimeout(20)
+                self.browse_remote = RemoteFiles(channel)
                 path = self.remote.normalize('.')
                 def ready():
                     if self.closed:
                         return
                     self.state.set_text('已连接 · ' + host)
                     self.other.set_sensitive(True)
-                    self.other.load(path)
+                    self.other.load(path, canonical=True)
                 GLib.idle_add(ready)
             except Exception:
                 if self.client:
                     self.client.close()
-                self.client = self.remote = None
+                self.client = self.remote = self.browse_remote = None
                 raise
             finally:
                 def finished():
@@ -612,3 +687,5 @@ class TransferWindow(Gtk.Window):
         for event in list(self.waiters):
             event.set()
         self.operations.put(None)
+        self.local.operations.put(None)
+        self.other.operations.put(None)

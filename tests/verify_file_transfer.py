@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'app'))
 import paramiko
-from file_transport import LocalFiles, Cancelled, connect, ssh_host, transfer
+from file_transport import RemoteFiles, LocalFiles, Cancelled, connect, ssh_host, transfer
 
 
 class Server(paramiko.ServerInterface):
@@ -119,6 +119,34 @@ def main():
             assert (remote_root / source.name / '子目录' / '中文 空格.bin').read_bytes() == payload
             assert (remote_root / source.name / '空文件夹').is_dir()
             assert progress[-1] == (len(payload), len(payload))
+            # A browse session on the same authenticated SSH connection must
+            # remain usable while the transfer worker is paused mid-copy.
+            browser = RemoteFiles(client.open_sftp())
+            browser.sftp.get_channel().settimeout(3)
+            assert browser.sftp.get_channel() != remote.sftp.get_channel()
+            paused, resume = threading.Event(), threading.Event()
+            errors = []
+            def slow_progress(done, total):
+                if done and not paused.is_set():
+                    paused.set()
+                    if not resume.wait(5):
+                        raise RuntimeError('concurrent browse did not finish')
+            def copy():
+                try:
+                    transfer(local, remote, str(source), '/', event, slow_progress, lambda _: 'overwrite')
+                except Exception as error:
+                    errors.append(error)
+            thread = threading.Thread(target=copy)
+            thread.start()
+            try:
+                assert paused.wait(5)
+                assert any(name == source.name for name, _ in browser.listing('/'))
+                assert browser.listing('/' + source.name)
+            finally:
+                resume.set()
+                thread.join(8)
+                browser.sftp.close()
+            assert not thread.is_alive() and not errors, errors
             output = root / 'output'
             output.mkdir()
             transfer(remote, local, '/' + source.name, str(output), event, lambda *_: None)

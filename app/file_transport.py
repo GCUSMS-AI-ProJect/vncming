@@ -57,7 +57,8 @@ class LocalFiles:
     def normalize(self, path):
         return os.path.abspath(os.path.expanduser(path))
     def listing(self, path):
-        return [(name, self.info(self.join(path, name))) for name in os.listdir(path)]
+        with os.scandir(path) as entries:
+            return [(entry.name, entry.stat(follow_symlinks=False)) for entry in entries]
     def info(self, path):
         return os.lstat(path)
     def mkdir(self, path):
