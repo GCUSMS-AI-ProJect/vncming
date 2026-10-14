@@ -1,6 +1,6 @@
 # VNCMing
 
-简洁的 Ubuntu / Linux X11 远程桌面客户端，基于 TigerVNC。
+简洁的 Ubuntu / Linux X11 远程桌面客户端。
 支持保存连接、IP 搜索、画面缩放，以及文件与文件夹传输。密码保存在系统钥匙环。
 
 ## 界面预览
