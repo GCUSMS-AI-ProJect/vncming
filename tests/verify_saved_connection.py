@@ -3,6 +3,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
 """Exercise row actions, edited fields, keyring storage and pipe authentication."""
 import json
+import select
 import socket
 import struct
 import tempfile
@@ -63,13 +64,44 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         pending['started'] -= 11000000
         assert window.poll_pending('127.0.0.1::5999') is False
         pending['process'].wait(3)
-        assert messages and '连接超时' in messages[0]
+        assert len(messages) == 1 and '连接超时' in messages[0]
         assert not window.pending_connections
+        assert not pending['dialog'].get_visible()
+        assert window.poll_pending('127.0.0.1::5999') is False
+        assert len(messages) == 1
         window.poll_child(pending['process'], '127.0.0.1::5999')
         result['timeout_and_duplicate_protection'] = True
     finally:
         viewer.subprocess.Popen = original_popen
         window.message = original_message
+
+    # A real native connection error must stop the launcher timeout even while
+    # its own error dialog remains open beyond the ten-second deadline.
+    with socket.socket() as refused:
+        refused.bind(('127.0.0.1', 0))  # Bound but not listening.
+        address = '127.0.0.1::' + str(refused.getsockname()[1])
+        messages = []
+        window.message = messages.append
+        process = None
+        try:
+            window.start_connection(address)
+            pending = window.pending_connections[address]
+            process = pending['process']
+            assert select.select([pending['descriptor']], [], [], 5)[0]
+            pending['started'] -= 11000000
+            assert window.poll_pending(address) is False
+            assert address not in window.pending_connections
+            assert not pending['dialog'].get_visible()
+            assert window.poll_pending(address) is False
+            assert not messages, messages
+            assert process.poll() is None, 'Native error dialog should remain open'
+            result['native_error_has_no_duplicate_timeout'] = True
+        finally:
+            window.message = original_message
+            if process is not None:
+                process.terminate()
+                process.wait(5)
+                window.poll_child(process, address)
 
     def entries(widget):
         found = [widget] if isinstance(widget, Gtk.Entry) else []
@@ -115,7 +147,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         assert json.loads(viewer.DATA.read_text())['connections'][0] == saved
         row = window.table.get_row_at_index(0)
         marker = row.get_child().get_children()[0].get_children()[-1]
-        assert marker.get_label() == '★'
+        assert marker.get_label() == '最近'
         result['newest_first_and_username_address_deduplication'] = True
         server = socket.socket()
         server.bind(('127.0.0.1', 0))

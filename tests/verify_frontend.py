@@ -24,8 +24,8 @@ def check(Viewer):
         window.new_connection()
         GLib.timeout_add(350,close_dialog,'connection-options.png')
         window.show_options()
-        menu=window.get_child().get_children()[0].get_children()[0].get_submenu()
-        menu.popup_at_widget(window.get_child().get_children()[0].get_children()[0],Gdk.Gravity.SOUTH_WEST,Gdk.Gravity.NORTH_WEST,None)
+        menu=window.menu_bar.get_children()[0].get_submenu()
+        menu.popup_at_widget(window.menu_bar.get_children()[0],Gdk.Gravity.SOUTH_WEST,Gdk.Gravity.NORTH_WEST,None)
         def finish():
             shot(menu,'launcher-menu.png')
             menu.popdown()

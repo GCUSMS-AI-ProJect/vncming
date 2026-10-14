@@ -11,6 +11,7 @@ import struct
 import subprocess
 import threading
 import time
+import tempfile
 import gi
 gi.require_version('Gdk','3.0')
 from gi.repository import Gdk
@@ -21,6 +22,7 @@ result={}
 server=socket.socket(); server.bind(('127.0.0.1',0));server.listen(1)
 port=server.getsockname()[1]
 ready=threading.Event()
+pointer_clicks=[]
 def serve():
  try:
   s,_=server.accept();s.settimeout(30)
@@ -54,7 +56,9 @@ def serve():
     color=bytes([248,246,245,0]);pixels=color*(800*480)
     s.sendall(b'\x00\x00\x00\x01'+struct.pack('!HHHHi',0,0,800,480,0)+pixels)
    elif kind==4: read(7)
-   elif kind==5: read(5)
+   elif kind==5:
+    pointer=struct.unpack('!BHH',read(5))
+    if pointer[0] & 1: pointer_clicks.append(pointer)
    elif kind==6:
     read(3);n=struct.unpack('!I',read(4))[0];read(n)
    else: raise ValueError(kind)
@@ -63,8 +67,13 @@ def serve():
   result['server_error']=str(e); print('Fixture error:',repr(e),flush=True)
  finally: server.close()
 threading.Thread(target=serve,daemon=True).start()
+transfer_fixture = tempfile.TemporaryDirectory(prefix='vncming-transfer-menu-')
+transfer_launcher = Path(transfer_fixture.name) / 'launcher'
+transfer_result = Path(transfer_fixture.name) / 'arguments'
+transfer_launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(transfer_result) + '"\n')
+transfer_launcher.chmod(0o755)
 log=(OUTPUT/'ui-check.log').open('w')
-proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen=0','-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,env={**os.environ,"XMODIFIERS":"@im=none"})
+proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen='+str(int('--fullscreen' in sys.argv)),'-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,env={**os.environ,"XMODIFIERS":"@im=none", 'VNCMING_TRANSFER_LAUNCHER': str(transfer_launcher), 'VNCMING_TRANSFER_ADDRESS': '127.0.0.1::'+str(port)})
 def find(title):
  import re
  for _ in range(100):
@@ -100,6 +109,38 @@ try:
  assert ready.wait(10),('RFB fixture not initialized',result)
  desktop=find('VNCMing UI Test '+str(port))
  time.sleep(.5)
+ import re
+ def click_transfer_button():
+  info=subprocess.run(['xwininfo','-id',desktop],capture_output=True,text=True).stdout
+  width=int(re.search(r'Width:\s+(\d+)',info)[1])
+  before=len(pointer_clicks)
+  if transfer_result.exists(): transfer_result.unlink()
+  subprocess.run(['xdotool','mousemove','--window',desktop,str(width-32),'22','click','1'],check=True)
+  for _ in range(30):
+   if transfer_result.exists(): break
+   time.sleep(.05)
+  assert transfer_result.exists(), 'Visible transfer button did not launch'
+  assert transfer_result.read_text().splitlines()==['--files','127.0.0.1::'+str(port)]
+  time.sleep(.1)
+  assert len(pointer_clicks)==before, 'Transfer button click reached the remote desktop'
+ click_transfer_button()
+ before=len(pointer_clicks)
+ subprocess.run(['xdotool','mousemove','--window',desktop,'80','22','click','1'],check=True)
+ time.sleep(.2)
+ assert len(pointer_clicks)==before, 'Empty toolbar click reached remote desktop'
+ if '--fullscreen' not in sys.argv:
+  subprocess.run(['xdotool','mousemove','--window',desktop,'100','94','click','1'],check=True)
+  time.sleep(.2)
+  assert pointer_clicks[-1][1:]==(100,50), pointer_clicks
+ capture('remote-transfer-button'+('-fullscreen' if '--fullscreen' in sys.argv else '')+'.png')
+ if '--fullscreen' not in sys.argv:
+  subprocess.run(['xdotool','windowsize',desktop,'1000','650'],check=True)
+  time.sleep(.4)
+  click_transfer_button()
+  subprocess.run(['xdotool','windowsize',desktop,'800','480'],check=True)
+  time.sleep(.4)
+ transfer_result.unlink()
+ result['visible_file_transfer_button']=True
  subprocess.run(['xdotool','mousemove','--window',desktop,'300','200','click','1'],check=True)
  keys(desktop,'F8')
  time.sleep(.3)
@@ -109,7 +150,7 @@ try:
  menus=[]
  for line in tree.splitlines():
   m=re.search(r'(0x[0-9a-f]+).*?(\d+)x(\d+)\+[0-9]+\+[0-9]+',line)
-  if m and 110 <= int(m[2]) <= 180 and 280 <= int(m[3]) <= 340:
+  if m and 110 <= int(m[2]) <= 180 and 280 <= int(m[3]) <= 380:
    menus.append(m[1])
  assert menus, 'Context menu did not appear'
  subprocess.run(['xdotool','mousemove','--window',menus[0],'60','248','click','1'],check=True)
@@ -121,6 +162,21 @@ try:
   capture('native-options-'+page+'.png')
   assert proc.poll() is None, 'Viewer exited while switching options pages'
  keys(options,'Escape')
+ keys(desktop,'F8')
+ time.sleep(.3)
+ tree=subprocess.run(['xwininfo','-root','-tree'],capture_output=True,text=True).stdout
+ menus=[]
+ for line in tree.splitlines():
+  m=re.search(r'(0x[0-9a-f]+).*?(\d+)x(\d+)\+[0-9]+\+[0-9]+',line)
+  if m and 110 <= int(m[2]) <= 180 and 280 <= int(m[3]) <= 380:
+   menus.append(m[1])
+ assert menus
+ subprocess.run(['xdotool','mousemove','--window',menus[0],'60','270','click','1'],check=True)
+ for _ in range(30):
+  if transfer_result.exists(): break
+  time.sleep(.05)
+ assert transfer_result.read_text().splitlines()==['--files','127.0.0.1::'+str(port)]
+ result['file_transfer_menu']=True
  result['native_options']=True
  result['native_ui']=True
  result['native_process_alive']=proc.poll() is None
@@ -129,6 +185,7 @@ finally:
  try: proc.wait(5)
  except subprocess.TimeoutExpired: proc.kill();proc.wait()
  log.close()
+ transfer_fixture.cleanup()
 (OUTPUT/'ui-check.json').write_text(json.dumps(result,indent=2))
 print(json.dumps(result))
 assert result.get('authentication') and result.get('native_ui') and not result.get('server_error'),result

@@ -55,6 +55,7 @@ public:
   void setLEDState(unsigned int state);
 
   void draw(Surface* dst);
+  void openFileTransfer();
 
   // Clipboard events
   void handleClipboardRequest();

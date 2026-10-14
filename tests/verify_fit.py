@@ -3,6 +3,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
 """Verify full-image rendering and mouse coordinates against a local RFB server."""
 import json
+import os
 import re
 import socket
 import struct
@@ -26,6 +27,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
     title = 'VNCMing Fit Test ' + str(port)
     points, errors, resize_requests = [], [], []
     remote_dimensions = [800,600]
+    partial_updated = threading.Event()
     def serve():
         try:
             with listener.accept()[0] as connection:
@@ -60,6 +62,10 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
                                 advertised = True
                             connection.sendall(struct.pack('!BBH',0,0,2 if extended else 1)+extended+struct.pack('!HHHHi',0,0,800,600,0)+pixels)
                             sent = True
+                        elif not resize_supported and not partial_updated.is_set():
+                            patch = b'\xff\x00\xff\x00' * (32*32)
+                            connection.sendall(struct.pack('!BBH',0,0,1)+struct.pack('!HHHHi',180,240,32,32,0)+patch)
+                            partial_updated.set()
                         elif resize_supported and late_resize_supported and not advertised:
                             extended = struct.pack('!HHHHi',0,0,800,600,-308)
                             extended += b'\x01\x00\x00\x00'+struct.pack('!IHHHHI',0,0,0,800,600,0)
@@ -95,7 +101,10 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
     if fixed_resolution:
         args.append('-DesktopSize=%dx%d' % fixed_resolution)
     log = (Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.log').open('w')
-    process = subprocess.Popen(args+['127.0.0.1::'+str(port)],stdout=log,stderr=log)
+    environment = os.environ.copy()
+    if '--toolbar' in sys.argv:
+        environment.update(VNCMING_TRANSFER_LAUNCHER=str(Path(ENGINE).parents[2] / 'vncming'), VNCMING_TRANSFER_ADDRESS='127.0.0.1::'+str(port))
+    process = subprocess.Popen(args+['127.0.0.1::'+str(port)],stdout=log,stderr=log,env=environment)
     try:
         window = None
         for _ in range(100):
@@ -112,15 +121,22 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             info=subprocess.run(['xwininfo','-id',window],capture_output=True,text=True).stdout
             def field(name): return int(re.search(name+r':\s+(-?\d+)',info)[1])
             width,height=field('Width'),field('Height')
+            top = 44 if '--toolbar' in sys.argv else 0
+            area_height = height - top
             root=Gdk.get_default_root_window()
             image=Gdk.pixbuf_get_from_window(root,field('Absolute upper-left X'),field('Absolute upper-left Y'),width,height)
             image.savev(str(Path(__file__).resolve().parent.parent / 'build/test-results/fit-check.png'),'png',[],[])
             data=image.get_pixels();stride=image.get_rowstride();channels=image.get_n_channels()
-            # Stay above the desktop input-method indicator at the lower right.
-            for x,y,expected in [(20,20,(255,0,0)),(width-20,20,(0,255,0)),(20,height-60,(0,0,255)),(width-100,height-60,(255,255,255))]:
+            if not resize_supported:
+                assert partial_updated.is_set(), 'incremental update was not sent'
+                px,py=int(196*width/800),top+int(256*area_height/600)
+                offset=py*stride+px*channels
+                assert tuple(data[offset:offset+3])==(255,0,255), 'incremental patch was not rendered'
+            # Keep the white sample away from the desktop's floating input method.
+            for x,y,expected in [(width//4,top+area_height//4,(255,0,0)),(3*width//4,top+area_height//4,(0,255,0)),(20,height-60,(0,0,255)),(3*width//4,top+3*area_height//4,(255,255,255))]:
                 offset=y*stride+x*channels
                 assert tuple(data[offset:offset+3]) == expected, (width,height,x,y,tuple(data[offset:offset+3]))
-            subprocess.run(['xdotool','windowactivate','--sync',window,'mousemove','--window',window,str(width//4),str(height//4),'click','1'],check=True)
+            subprocess.run(['xdotool','windowactivate','--sync',window,'mousemove','--window',window,str(width//4),str(top+area_height//4),'click','1'],check=True)
             time.sleep(.2)
             assert points and abs(points[-1][0]-remote_dimensions[0]/4)<=2 and abs(points[-1][1]-remote_dimensions[1]/4)<=2, points
             return width,height

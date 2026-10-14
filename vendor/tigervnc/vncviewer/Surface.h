@@ -45,6 +45,8 @@ public:
   void draw(Surface* dst, int src_x, int src_y, int x, int y, int w, int h);
 #if !defined(WIN32) && !defined(__APPLE__)
   void drawScaled(Surface* dst, int x, int y, int w, int h);
+  void drawScaled(Surface* dst, int x, int y, int w, int h,
+                  int clip_x, int clip_y, int clip_w, int clip_h);
 #endif
 
   void blend(int src_x, int src_y, int x, int y, int w, int h, int a=255);

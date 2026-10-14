@@ -76,6 +76,23 @@ static const PixelFormat mediumColourPF(8, 8, false, true,
 // Time new bandwidth estimates are weighted against (in ms)
 static const unsigned bpsEstimateWindow = 1000;
 
+static void notifyLauncherConnection(char status)
+{
+#ifndef WIN32
+  const char* statusFd = getenv("VNCMING_STATUS_FD");
+  if (statusFd) {
+    char* end = NULL;
+    long fd = strtol(statusFd, &end, 10);
+    if (*statusFd && !*end && fd >= 3 && fd <= 2147483647) {
+      ssize_t written = ::write((int)fd, &status, 1);
+      (void)written;
+      ::close((int)fd);
+    }
+    unsetenv("VNCMING_STATUS_FD");
+  }
+#endif
+}
+
 CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
   : serverHost(0), serverPort(0), desktop(NULL),
     updateCount(0), pixelCount(0),
@@ -112,26 +129,16 @@ CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
       }
     } catch (rdr::Exception& e) {
       vlog.error("%s", e.str());
+      // The native error dialog owns this failure; stop the launcher's timer.
+      notifyLauncherConnection('0');
       abort_connection(_("Failed to connect to \"%s\":\n\n%s"),
                        vncServerName, e.str());
       return;
     }
   }
 
-#ifndef WIN32
   // Let the launcher dismiss its progress sheet once TCP has connected.
-  const char* statusFd = getenv("VNCMING_STATUS_FD");
-  if (statusFd) {
-    char* end = NULL;
-    long fd = strtol(statusFd, &end, 10);
-    if (*statusFd && !*end && fd >= 3 && fd <= 2147483647) {
-      ssize_t written = ::write((int)fd, "1", 1);
-      (void)written;
-      ::close((int)fd);
-    }
-    unsetenv("VNCMING_STATUS_FD");
-  }
-#endif
+  notifyLauncherConnection('1');
   Fl::add_fd(sock->getFd(), FL_READ | FL_EXCEPT, socketEvent, this);
 
   setServerName(serverHost);

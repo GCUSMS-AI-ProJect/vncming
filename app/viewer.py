@@ -13,14 +13,27 @@ import credentials
 
 import gi
 gi.require_version('Gtk', '3.0')
+gi.require_version('GdkX11', '3.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+from gi.repository import GdkX11
 from motion import AnimatedDialog, animate_menu
+from suggestions import AddressSuggestions
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_HOME = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config')))
 DATA = CONFIG_HOME / 'vncming' / 'connections.json'
 LEGACY_DATA = CONFIG_HOME / 'tigervnc-classic' / 'connections.json'
 ENGINE = str(ROOT / 'build' / 'vncviewer' / 'vncviewer')
+
+def action_icon(button, name, color='#a44d14'):
+    svg = (ROOT / 'assets' / 'actions' / (name + '.svg')).read_text()
+    loader = GdkPixbuf.PixbufLoader.new_with_type('svg')
+    loader.set_size(18, 18)
+    loader.write(svg.replace('#a44d14', color).encode('utf-8'))
+    loader.close()
+    button.set_image(Gtk.Image.new_from_pixbuf(loader.get_pixbuf()))
+    button.set_image_position(Gtk.PositionType.LEFT)
+    button.set_always_show_image(True)
 
 
 def target_address(value):
@@ -47,7 +60,7 @@ def target_address(value):
 
 
 class Viewer(Gtk.Window):
-    def __init__(self):
+    def __init__(self, show_window=True):
         GLib.set_prgname('vncming')
         Gdk.set_program_class('VNCMing')
         super().__init__(title='VNCMing')
@@ -56,10 +69,13 @@ class Viewer(Gtk.Window):
         self.set_icon_from_file(str(ROOT / 'assets' / 'vncming-orange.png'))
         Gtk.Window.set_default_icon_from_file(str(ROOT / 'assets' / 'vncming-orange.png'))
         self.connect('destroy', Gtk.main_quit)
+        self.connect('button-press-event', self.clear_entry_focus)
         self.entries = []
         self.approved_hostname_hosts = set()
         self.options = {'FullScreen': False, 'Maximize': True, 'FixedResolution': True, 'FitToWindow': True, 'RemoteResize': True, 'ViewOnly': False, 'Shared': True}
         self.children = {}
+        self.transfer_windows = {}
+        self.connect('destroy', lambda *_: [w.destroy() for w in list(self.transfer_windows.values())])
         self.pending_connections = {}
         self.connect('destroy', lambda *_: [self.cancel_pending(address)
                      for address in list(self.pending_connections)])
@@ -85,9 +101,13 @@ class Viewer(Gtk.Window):
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(main)
         menu = Gtk.MenuBar()
-        for label, actions in [('文件', [('新建', self.new_connection), ('退出', lambda *_: self.destroy())]), ('查看', [('连接选项…', self.show_options)]), ('帮助', [('关于', self.about)])]:
+        self.menu_bar = menu
+        menu.get_style_context().add_class('desktop-menu')
+        menu.set_valign(Gtk.Align.CENTER)
+        for label, actions in [('文件', [('新建', self.new_connection), ('文件传输…', self.open_transfer), ('退出', lambda *_: self.destroy())]), ('查看', [('连接选项…', self.show_options)]), ('帮助', [('关于', self.about)])]:
             item = Gtk.MenuItem(label=label)
             sub = Gtk.Menu()
+            sub.get_style_context().add_class('desktop-submenu')
             animate_menu(sub)
             for name, callback in actions:
                 action = Gtk.MenuItem(label=name)
@@ -104,7 +124,10 @@ class Viewer(Gtk.Window):
         toolbar.pack_start(Gtk.Label(label='IP地址'), False, False, 0)
         self.address.connect('activate', self.connect_address)
         toolbar.pack_start(self.address, True, True, 0)
+        self.address.set_placeholder_text('输入 IP 或名称，查找已保存的连接')
+        self.suggestions = AddressSuggestions(self.address, lambda: self.entries)
         button = Gtk.Button(label='连接')
+        action_icon(button, 'connect', '#ffffff')
         button.get_style_context().add_class('connect')
         button.connect('clicked', self.connect_address)
         toolbar.pack_start(button, False, False, 0)
@@ -113,11 +136,21 @@ class Viewer(Gtk.Window):
         body.set_border_width(24)
         main.pack_start(body, True, True, 0)
         heading = Gtk.Box(spacing=8)
+        title_group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        title_line = Gtk.Box(spacing=10)
         label = Gtk.Label(label='我的连接', xalign=0)
         label.get_style_context().add_class('section')
-        heading.pack_start(label, True, True, 0)
+        title_line.pack_start(label, False, False, 0)
+        self.connection_count = Gtk.Label()
+        self.connection_count.set_valign(Gtk.Align.CENTER)
+        self.connection_count.get_style_context().add_class('count-badge')
+        title_line.pack_start(self.connection_count, False, False, 0)
+        title_group.pack_start(title_line, False, False, 0)
+        heading.pack_start(title_group, True, True, 0)
         for title, callback in [('新建', self.new_connection)]:
             b = Gtk.Button(label=title)
+            b.set_valign(Gtk.Align.CENTER)
+            action_icon(b, 'new')
             b.connect('clicked', callback)
             heading.pack_start(b, False, False, 0)
         body.pack_start(heading, False, False, 0)
@@ -129,11 +162,11 @@ class Viewer(Gtk.Window):
         columns = Gtk.Box(spacing=20, margin_start=14, margin_end=14, margin_top=8, margin_bottom=8)
         columns.get_style_context().add_class('list-columns')
         name_heading = Gtk.Label(label='名称', xalign=0)
-        name_heading.set_size_request(200, -1)
+        name_heading.set_size_request(220, -1)
         columns.pack_start(name_heading, False, False, 0)
         columns.pack_start(Gtk.Label(label='IP地址', xalign=0), True, True, 0)
         action_heading = Gtk.Label(label='操作')
-        action_heading.set_size_request(168, -1)
+        action_heading.set_size_request(200, -1)
         columns.pack_end(action_heading, False, False, 0)
         list_panel.pack_start(columns, False, False, 0)
         self.table = Gtk.ListBox()
@@ -143,6 +176,7 @@ class Viewer(Gtk.Window):
         self.table.connect('row-selected', self.selected_changed)
         list_panel.pack_start(self.table, True, True, 0)
         scroll = Gtk.ScrolledWindow()
+        scroll.get_style_context().add_class('connection-panel')
         scroll.add(list_panel)
         self.stack.add_named(scroll, 'list')
         empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
@@ -151,11 +185,32 @@ class Viewer(Gtk.Window):
         title = Gtk.Label(label='连接到你的电脑')
         title.get_style_context().add_class('empty-title')
         empty.pack_start(title, False, False, 0)
+        caption = Gtk.Label(label='新建一个连接，或在上方输入 IP 地址直接访问')
+        caption.get_style_context().add_class('muted')
+        empty.pack_start(caption, False, False, 0)
+        create = Gtk.Button(label='新建连接')
+        action_icon(create, 'new', '#ffffff')
+        create.set_halign(Gtk.Align.CENTER)
+        create.get_style_context().add_class('suggested-action')
+        create.connect('clicked', self.new_connection)
+        empty.pack_start(create, False, False, 0)
         self.stack.add_named(empty, 'empty')
         self.status = Gtk.Label()
-        self.show_all()
+        if show_window:
+            self.show_all()
         self.refresh()
-        self.address.grab_focus()
+        self.set_focus(None)
+
+    @staticmethod
+    def clear_entry_focus(window, event):
+        widget = Gtk.get_event_widget(event)
+        while widget is not None:
+            if isinstance(widget, (Gtk.Entry, Gtk.Popover)):
+                return False
+            widget = widget.get_parent()
+        if isinstance(window.get_focus(), Gtk.Entry):
+            window.set_focus(None)
+        return False
 
     def message(self, text):
         dialog = AnimatedDialog(title='VNCMing', transient_for=self, modal=True)
@@ -184,6 +239,7 @@ class Viewer(Gtk.Window):
             self.message('无法保存连接：' + str(error))
 
     def refresh(self):
+        self.connection_count.set_text(str(len(self.entries)))
         for row in self.table.get_children():
             self.table.remove(row)
         for index, entry in enumerate(self.entries):
@@ -191,23 +247,34 @@ class Viewer(Gtk.Window):
             box = Gtk.Box(spacing=20, margin=14)
             name = Gtk.Label(label=entry['name'], xalign=0, ellipsize=3)
             name_column = Gtk.Box(spacing=8)
-            name_column.set_size_request(200, -1)
+            name.get_style_context().add_class('connection-name')
+            name_column.set_size_request(220, -1)
+            icon = Gtk.Image.new_from_icon_name('video-display-symbolic', Gtk.IconSize.BUTTON)
+            icon.get_style_context().add_class('device-icon')
+            name_column.pack_start(icon, False, False, 0)
             name_column.pack_start(name, True, True, 0)
             if index == 0:
-                latest = Gtk.Label(label='★')
+                latest = Gtk.Label(label='最近')
+                latest.set_valign(Gtk.Align.CENTER)
                 latest.set_tooltip_text('最新保存的连接')
                 latest.get_style_context().add_class('latest-connection')
                 name_column.pack_end(latest, False, False, 0)
             box.pack_start(name_column, False, False, 0)
-            box.pack_start(Gtk.Label(label=entry['address'], xalign=0, selectable=False), True, True, 0)
+            address_label = Gtk.Label(label=entry['address'], xalign=0, selectable=False, ellipsize=3)
+            address_label.get_style_context().add_class('connection-address')
+            address_label.set_tooltip_text(entry['address'])
+            name.set_tooltip_text(entry['name'])
+            box.pack_start(address_label, True, True, 0)
             button = Gtk.Button(label='连接')
-            button.set_size_request(80, -1)
+            action_icon(button, 'connect')
+            button.set_size_request(96, -1)
             button.get_style_context().add_class('row-connect')
             button.connect('clicked', lambda _, i=index: self.connect_entry(i))
             actions = Gtk.Box(spacing=8)
             actions.pack_start(button, False, False, 0)
             delete = Gtk.Button(label='删除')
-            delete.set_size_request(80, -1)
+            action_icon(delete, 'delete', '#8a7e72')
+            delete.set_size_request(96, -1)
             delete.get_style_context().add_class('row-delete')
             delete.connect('clicked', lambda _, i=index: self.delete_connection(index=i))
             actions.pack_start(delete, False, False, 0)
@@ -227,12 +294,14 @@ class Viewer(Gtk.Window):
             self.address.set_text(self.entries[index]['address'])
 
     def connection_dialog(self, index=None):
-        dialog = AnimatedDialog(title='连接属性' if index is not None else '新建', transient_for=self, modal=True)
+        dialog = AnimatedDialog(title='连接属性' if index is not None else '新建连接', transient_for=self, modal=True)
+        dialog.connect('button-press-event', self.clear_entry_focus)
         dialog.add_buttons('取消', Gtk.ResponseType.CANCEL, '保存', Gtk.ResponseType.OK)
         dialog.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
         grid = Gtk.Grid(column_spacing=14, row_spacing=14, margin=20)
         allow_hostname_mismatch = Gtk.CheckButton(label='自动继续证书主机名不匹配提示')
         name, address, username, password = Gtk.Entry(), Gtk.Entry(), Gtk.Entry(), Gtk.Entry()
+        name.set_placeholder_text('留空则使用 IP 地址')
         password.set_visibility(False)
         password.set_input_purpose(Gtk.InputPurpose.PASSWORD)
         password.set_icon_from_icon_name(Gtk.EntryIconPosition.SECONDARY, "view-reveal-symbolic")
@@ -261,6 +330,7 @@ class Viewer(Gtk.Window):
         grid.attach(allow_hostname_mismatch, 0, 4, 2, 1)
         dialog.get_content_area().add(grid)
         dialog.show_all()
+        dialog.set_focus(None)
         while dialog.run() == Gtk.ResponseType.OK:
             try:
                 target = target_address(address.get_text())
@@ -294,8 +364,12 @@ class Viewer(Gtk.Window):
         old_identifiers = {self.entries[i].get('credential_id') for i in replaced}
         for old_identifier in old_identifiers - {None, identifier}:
             credentials.clear(old_identifier)
+            credentials.clear(old_identifier + ':sftp')
         entry = {'name': name, 'address': target, 'username': username, 'credential_id': identifier,
                  'allow_hostname_mismatch': bool(allow_hostname_mismatch)}
+        if source is not None:
+            entry.update({key: self.entries[source][key] for key in ('ssh_port', 'ssh_username')
+                          if key in self.entries[source]})
         self.entries = [entry] + [existing for i, existing in enumerate(self.entries) if i not in replaced]
         self.save()
         self.refresh()
@@ -315,6 +389,9 @@ class Viewer(Gtk.Window):
         if index is not None and 0 <= index < len(self.entries):
             try:
                 credentials.clear(self.entries[index].get("credential_id"))
+                identifier = self.entries[index].get('credential_id')
+                if identifier:
+                    credentials.clear(identifier + ':sftp')
             except GLib.Error as error:
                 self.message("无法删除钥匙环中的密码：" + str(error))
                 return
@@ -326,13 +403,19 @@ class Viewer(Gtk.Window):
         dialog = AnimatedDialog(title='连接选项', transient_for=self, modal=True)
         dialog.add_buttons('取消', Gtk.ResponseType.CANCEL, '确定', Gtk.ResponseType.OK)
         dialog.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
-        box = dialog.get_content_area()
-        box.set_border_width(18)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=24)
+        dialog.get_content_area().add(box)
         checks = {}
         for key, label in [('FullScreen', '以全屏模式打开'), ('Maximize', '连接后最大化窗口'), ('FixedResolution', '远程分辨率固定为 1920×1080'), ('FitToWindow', '远程画面铺满窗口'), ('RemoteResize', '远程分辨率随窗口调整（未固定时）'), ('ViewOnly', '仅查看（不发送鼠标和键盘）'), ('Shared', '允许共享远程桌面')]:
+            if key in ('FullScreen', 'ViewOnly'):
+                if key == 'ViewOnly':
+                    box.pack_start(Gtk.Separator(margin_top=10, margin_bottom=10), False, False, 0)
+                heading = Gtk.Label(label='画面与窗口' if key == 'FullScreen' else '控制与共享', xalign=0)
+                heading.get_style_context().add_class('group-title')
+                box.pack_start(heading, False, False, 5)
             checks[key] = Gtk.CheckButton(label=label)
             checks[key].set_active(self.options[key])
-            box.pack_start(checks[key], False, False, 7)
+            box.pack_start(checks[key], False, False, 2)
         dialog.show_all()
         if dialog.run() == Gtk.ResponseType.OK:
             self.options = {key: check.get_active() for key, check in checks.items()}
@@ -343,7 +426,30 @@ class Viewer(Gtk.Window):
         if 0 <= index < len(self.entries):
             self.start_connection(self.entries[index]['address'], self.entries[index])
 
+    def open_transfer(self, *_, index=None):
+        try:
+            from file_transfer import TransferWindow
+            if index is None:
+                index = self.selection()
+            if index is not None:
+                entry = self.entries[index]
+            else:
+                address = target_address(self.address.get_text())
+                entry = next((e for e in self.entries if e['address'] == address),
+                             {'name': address, 'address': address})
+            key = (entry['address'], entry.get('username', ''))
+            if key in self.transfer_windows:
+                self.transfer_windows[key].present()
+                return
+            window = TransferWindow(self, entry)
+            self.transfer_windows[key] = window
+            window.connect('destroy', lambda *_: self.transfer_windows.pop(key, None))
+            GLib.idle_add(window.login)
+        except (ValueError, ImportError) as error:
+            self.message('无法打开文件传输：' + str(error))
+
     def connect_address(self, *_):
+        self.suggestions.popup.popdown()
         try:
             address = target_address(self.address.get_text())
         except ValueError as error:
@@ -365,6 +471,13 @@ class Viewer(Gtk.Window):
                 args.append('-DesktopSize=1920x1080')
             args.append(address)
             environment = os.environ.copy()
+            environment.pop('VNCMING_PARENT_WINDOW', None)
+            parent_window = self.get_window()
+            if isinstance(parent_window, GdkX11.X11Window):
+                environment['VNCMING_PARENT_WINDOW'] = str(parent_window.get_xid())
+            environment['VNCMING_TRANSFER_LAUNCHER'] = str(ROOT / 'vncming')
+            environment['VNCMING_TRANSFER_ADDRESS'] = address
+            environment['VNCMING_TRANSFER_CONNECTION_ID'] = entry.get('credential_id', '') if entry else ''
             environment['XMODIFIERS'] = '@im=none'
             environment.pop('VNC_PASSWORD', None)
             environment.pop('VNC_USERNAME', None)
@@ -426,6 +539,7 @@ class Viewer(Gtk.Window):
         pending = self.pending_connections.pop(address, None)
         if pending:
             os.close(pending['descriptor'])
+            pending['dialog'].hide()
             pending['dialog'].destroy()
         return pending
 
@@ -442,7 +556,7 @@ class Viewer(Gtk.Window):
             ready = os.read(pending['descriptor'], 1)
         except BlockingIOError:
             ready = None
-        if ready == b'1' or ready == b'' or pending['process'].poll() is not None:
+        if ready in (b'1', b'0', b'') or pending['process'].poll() is not None:
             self.finish_pending(address)
             return False
         if GLib.get_monotonic_time() - pending['started'] >= 10000000:
@@ -464,7 +578,20 @@ class Viewer(Gtk.Window):
 
 
 if __name__ == '__main__':
-    if '--theme-check' in sys.argv:
+    if '--files' in sys.argv:
+        index = sys.argv.index('--files')
+        address = target_address(sys.argv[index + 1])
+        launcher = Viewer(show_window=False)
+        launcher.address.set_text(address)
+        connection_id = os.environ.get('VNCMING_TRANSFER_CONNECTION_ID')
+        saved_index = next((i for i, e in enumerate(launcher.entries)
+                            if connection_id and e.get('credential_id') == connection_id and e['address'] == address), None)
+        launcher.open_transfer(index=saved_index)
+        for window in launcher.transfer_windows.values():
+            window.connect('destroy', lambda *_: launcher.destroy())
+        if launcher.transfer_windows:
+            Gtk.main()
+    elif '--theme-check' in sys.argv:
         sys.path.insert(0, str(ROOT / 'tests'))
         from verify_frontend import check
         check(Viewer)

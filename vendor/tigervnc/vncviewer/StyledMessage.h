@@ -6,6 +6,7 @@
 #include <FL/fl_ask.H>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,30 @@ inline std::string vncFormatMessage(const char* format, va_list args) {
 }
 struct VncMessageResult { int value; };
 struct VncMessageAction { VncMessageResult* result; int index; };
+inline Window vncMessageParent() {
+  const char* value = getenv("VNCMING_PARENT_WINDOW");
+  if (!value || !*value) return 0;
+  char* end = NULL;
+  unsigned long parent = strtoul(value, &end, 10);
+  return *end ? 0 : parent;
+}
+inline void vncPositionMessage(Fl_Window& window, Window parent) {
+  fl_open_display();
+  int x, y, width, height;
+  XWindowAttributes attributes;
+  Window child;
+  if (parent && XGetWindowAttributes(fl_display, parent, &attributes) &&
+      XTranslateCoordinates(fl_display, parent, attributes.root, 0, 0, &x, &y, &child)) {
+    width = attributes.width;
+    height = attributes.height;
+  } else if (Fl::first_window()) {
+    Fl_Window* owner = Fl::first_window();
+    x = owner->x(); y = owner->y(); width = owner->w(); height = owner->h();
+  } else {
+    Fl::screen_work_area(x, y, width, height);
+  }
+  window.position(x + (width - window.w()) / 2, y + (height - window.h()) / 2);
+}
 inline void vncMessageButton(Fl_Widget* widget, void* context) {
   VncMessageAction* action = static_cast<VncMessageAction*>(context);
   action->result->value = action->index;
@@ -87,7 +112,10 @@ inline int vncShowMessage(const std::string& text, bool warning,
     x += buttonWidths[i] + 10;
   }
   window.end();
+  Window parent = vncMessageParent();
+  vncPositionMessage(window, parent);
   window.show();
+  if (parent) XSetTransientForHint(fl_display, fl_xid(&window), parent);
   while (window.shown()) {
     if (Fl::wait() < 0) { window.hide(); break; }
   }

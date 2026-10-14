@@ -38,6 +38,7 @@
 #include "Surface.h"
 #include "Viewport.h"
 #include "touch.h"
+#include "MacMotion.h"
 
 #include <FL/Fl.H>
 #include <FL/Fl_Image_Surface.H>
@@ -75,10 +76,35 @@ static rfb::LogWriter vlog("DesktopWindow");
 // issue for Fl::event_dispatch.
 static std::set<DesktopWindow *> instances;
 
+// Native vector icon remains sharp at every desktop scale.
+class TransferButton : public MacButton {
+public:
+  TransferButton(int x, int y) : MacButton(x, y, 40, 34) {
+    color(fl_rgb_color(250, 249, 247));
+    tooltip("打开此设备的文件传输窗口");
+    clear_visible_focus();
+  }
+  void draw() {
+    MacButton::draw();
+    fl_color(fl_rgb_color(164, 77, 20));
+    fl_line_style(FL_SOLID, 2);
+    int px = x() + (w() - 19) / 2, py = y() + (h() - 16) / 2;
+    fl_line(px, py+14, px, py+2);
+    fl_line(px, py+2, px+7, py+2);
+    fl_line(px+7, py+2, px+10, py+5);
+    fl_line(px+10, py+5, px+19, py+5);
+    fl_line(px+19, py+5, px+19, py+14);
+    fl_line(px, py+14, px+19, py+14);
+    fl_line(px+5, py+9, px+15, py+9);
+    fl_line(px+12, py+6, px+15, py+9, px+12, py+12);
+    fl_line_style(0);
+  }
+};
+
 DesktopWindow::DesktopWindow(int w, int h, const char *name,
                              const rfb::PixelFormat& serverPF,
                              CConn* cc_)
-  : Fl_Window(w, h), cc(cc_), offscreen(NULL), overlay(NULL),
+  : Fl_Window(w, h), cc(cc_), transferButton(NULL), offscreen(NULL), overlay(NULL),
     firstUpdate(true),
     delayedFullscreen(false), delayedDesktopSize(false),
     keyboardGrabbed(false), mouseGrabbed(false),
@@ -102,6 +128,19 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
   vscroll->callback(handleScroll, this);
 
   group->end();
+  transferButton = NULL;
+#ifdef __linux__
+  if (getenv("VNCMING_TRANSFER_LAUNCHER") && getenv("VNCMING_TRANSFER_ADDRESS")) {
+    transferButton = new TransferButton(w - 52, 5);
+    transferButton->callback([](Fl_Widget*, void* data) {
+      DesktopWindow* self = static_cast<DesktopWindow*>(data);
+      self->viewport->openFileTransfer();
+      self->viewport->take_focus();
+    }, this);
+  }
+#endif
+
+  h += toolbarHeight();
 
   callback(handleClose, this);
 
@@ -332,19 +371,19 @@ void DesktopWindow::resizeFramebuffer(int new_w, int new_h)
   // keep things that way for the new size, otherwise just keep things
   // like they are.
   if (!fitToWindow && !fullscreen_active() && !maximized) {
-    if ((w() == viewport->w()) && (h() == viewport->h()))
-      size(new_w, new_h);
+    if ((w() == viewport->w()) && (contentHeight() == viewport->h()))
+      size(new_w, new_h + toolbarHeight());
     else {
       // Make sure the window isn't too big. We do this manually because
       // we have to disable the window size restriction (and it isn't
       // entirely trustworthy to begin with).
-      if ((w() > new_w) || (h() > new_h))
-        size(__rfbmin(w(), new_w), __rfbmin(h(), new_h));
+      if ((w() > new_w) || (contentHeight() > new_h))
+        size(__rfbmin(w(), new_w), __rfbmin(h(), new_h + toolbarHeight()));
     }
   }
 
   viewport->resizeFramebuffer(new_w, new_h);
-  if (!fitToWindow) viewport->resize(0, 0, new_w, new_h);
+  if (!fitToWindow) viewport->resize(0, toolbarHeight(), new_w, new_h);
 
   repositionWidgets();
 }
@@ -425,7 +464,7 @@ void DesktopWindow::draw()
 
   // Active area inside scrollbars
   W = w() - (vscroll->visible() ? vscroll->w() : 0);
-  H = h() - (hscroll->visible() ? hscroll->h() : 0);
+  H = contentHeight() - (hscroll->visible() ? hscroll->h() : 0);
 
   // Full redraw?
   redraw = (damage() & ~FL_DAMAGE_CHILD);
@@ -433,9 +472,9 @@ void DesktopWindow::draw()
   // Simplify the clip region to a simple rectangle in order to
   // properly draw all the layers even if they only partially overlap
   if (redraw)
-    X = Y = 0;
+    { X = 0; Y = toolbarHeight(); }
   else
-    fl_clip_box(0, 0, W, H, X, Y, W, H);
+    fl_clip_box(0, toolbarHeight(), W, H, X, Y, W, H);
   fl_push_no_clip();
   fl_push_clip(X, Y, W, H);
 
@@ -550,12 +589,31 @@ void DesktopWindow::draw()
     update_child(*hscroll);
     update_child(*vscroll);
   }
+  if (transferButton) {
+    // Application chrome has its own area, outside the remote framebuffer.
+    fl_push_clip(0, 0, w(), toolbarHeight());
+    fl_rectf(0, 0, w(), toolbarHeight(), 246, 245, 243);
+    fl_color(fl_rgb_color(228, 223, 217));
+    fl_line(0, toolbarHeight()-1, w(), toolbarHeight()-1);
+    fl_color(fl_rgb_color(48, 128, 83));
+    fl_pie(16, 18, 8, 8, 0, 360);
+    fl_color(fl_rgb_color(81, 74, 67));
+    fl_font(FL_HELVETICA, 14);
+    fl_draw("已连接", 32, 0, std::max(0, w()-180), toolbarHeight(), FL_ALIGN_LEFT);
+    draw_child(*transferButton);
+    fl_pop_clip();
+  }
 }
 
 
 void DesktopWindow::setLEDState(unsigned int state)
 {
   viewport->setLEDState(state);
+}
+
+void DesktopWindow::fitRemoteWindow()
+{
+  size(viewport->w(), viewport->h() + toolbarHeight());
 }
 
 
@@ -794,6 +852,13 @@ void DesktopWindow::updateOverlay(void *data)
 
 int DesktopWindow::handle(int event)
 {
+  // Empty toolbar space must never send mouse presses/moves to the server.
+  if (transferButton && Fl::event_y() < toolbarHeight() &&
+      (event == FL_PUSH || event == FL_MOVE || event == FL_MOUSEWHEEL)) {
+    if (Fl::event_inside(transferButton))
+      return Fl_Window::handle(event);
+    return 1;
+  }
   switch (event) {
   case FL_FULLSCREEN:
     fullScreen.setParam(fullscreen_active());
@@ -1230,7 +1295,7 @@ void DesktopWindow::handleDesktopSize()
   } else if (::remoteResize) {
     // No explicit size, but remote resizing is on so make sure it
     // matches whatever size the window ended up being
-    remoteResize(w(), h());
+    remoteResize(w(), contentHeight());
   }
 }
 
@@ -1251,7 +1316,7 @@ void DesktopWindow::handleResizeTimeout(void *data)
 
   assert(self);
 
-  self->remoteResize(self->w(), self->h());
+  self->remoteResize(self->w(), self->contentHeight());
 }
 
 
@@ -1406,8 +1471,11 @@ void DesktopWindow::remoteResize(int width, int height)
 
 void DesktopWindow::repositionWidgets()
 {
+  if (transferButton)
+    transferButton->resize(std::max(4, w() - 52), 5, 40, 34);
   if (fitToWindow) {
-    viewport->setDisplaySize(w(), h());
+    viewport->setDisplaySize(w(), contentHeight());
+    viewport->position(0, toolbarHeight());
     hscroll->hide();
     vscroll->hide();
     damage(FL_DAMAGE_SCROLL);
@@ -1418,7 +1486,7 @@ void DesktopWindow::repositionWidgets()
   // Viewport position
 
   new_x = viewport->x();
-  new_y = viewport->y();
+  new_y = viewport->y() - toolbarHeight();
 
   if (w() > viewport->w())
     new_x = (w() - viewport->w()) / 2;
@@ -1430,14 +1498,16 @@ void DesktopWindow::repositionWidgets()
   }
 
   // Same thing for y axis
-  if (h() > viewport->h())
-    new_y = (h() - viewport->h()) / 2;
+  if (contentHeight() > viewport->h())
+    new_y = (contentHeight() - viewport->h()) / 2;
   else {
-    if (viewport->y() > 0)
+    if (viewport->y() > toolbarHeight())
       new_y = 0;
-    else if (h() > (viewport->y() + viewport->h()))
-      new_y = h() - viewport->h();
+    else if (contentHeight() > (viewport->y() - toolbarHeight() + viewport->h()))
+      new_y = contentHeight() - viewport->h();
   }
+
+  new_y += toolbarHeight();
 
   if ((new_x != viewport->x()) || (new_y != viewport->y())) {
     viewport->position(new_x, new_y);
@@ -1465,12 +1535,12 @@ void DesktopWindow::repositionWidgets()
     // then neither does; so we don't need to recurse on the "maybe"
     // cases.
 
-    if (w() - (h() < viewport->h() ? Fl::scrollbar_size() : 0) < viewport->w())
+    if (w() - (contentHeight() < viewport->h() ? Fl::scrollbar_size() : 0) < viewport->w())
       hscroll->show();
     else
       hscroll->hide();
 
-    if (h() - (w() < viewport->w() ? Fl::scrollbar_size() : 0) < viewport->h())
+    if (contentHeight() - (w() < viewport->w() ? Fl::scrollbar_size() : 0) < viewport->h())
       vscroll->show();
     else
       vscroll->hide();
@@ -1481,17 +1551,17 @@ void DesktopWindow::repositionWidgets()
   hscroll->resize(0, h() - Fl::scrollbar_size(),
                   w() - (vscroll->visible() ? Fl::scrollbar_size() : 0),
                   Fl::scrollbar_size());
-  vscroll->resize(w() - Fl::scrollbar_size(), 0,
+  vscroll->resize(w() - Fl::scrollbar_size(), toolbarHeight(),
                   Fl::scrollbar_size(),
-                  h() - (hscroll->visible() ? Fl::scrollbar_size() : 0));
+                  contentHeight() - (hscroll->visible() ? Fl::scrollbar_size() : 0));
 
   // Scrollbars range
 
   hscroll->value(-viewport->x(),
                  w() - (vscroll->visible() ? vscroll->w() : 0),
                  0, viewport->w());
-  vscroll->value(-viewport->y(),
-                 h() - (hscroll->visible() ? hscroll->h() : 0),
+  vscroll->value(toolbarHeight() - viewport->y(),
+                 contentHeight() - (hscroll->visible() ? hscroll->h() : 0),
                  0, viewport->h());
   hscroll->value(hscroll->clamp(hscroll->value()));
   vscroll->value(vscroll->clamp(vscroll->value()));
@@ -1545,7 +1615,7 @@ void DesktopWindow::scrollTo(int x, int y)
   // Scrollbar position results in inverse movement of
   // the viewport widget
   x = -x;
-  y = -y;
+  y = toolbarHeight() - y;
 
   if ((viewport->x() == x) && (viewport->y() == y))
     return;

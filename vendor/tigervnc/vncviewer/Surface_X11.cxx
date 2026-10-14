@@ -56,7 +56,22 @@ void Surface::draw(Surface* dst, int src_x, int src_y, int x, int y, int w, int 
 
 void Surface::drawScaled(Surface* dst, int x, int y, int w, int h)
 {
-  if (w <= 0 || h <= 0) return;
+  drawScaled(dst, x, y, w, h, x, y, w, h);
+}
+
+void Surface::drawScaled(Surface* dst, int x, int y, int w, int h,
+                         int clip_x, int clip_y, int clip_w, int clip_h)
+{
+  if (w <= 0 || h <= 0 || clip_w <= 0 || clip_h <= 0) return;
+  if (width() == w && height() == h) {
+    if (dst)
+      draw(dst, clip_x - x, clip_y - y, clip_x, clip_y, clip_w, clip_h);
+    else
+      draw(clip_x - x, clip_y - y, clip_x, clip_y, clip_w, clip_h);
+    return;
+  }
+  // XRender does not inherit FLTK's clip region. Restrict the composite
+  // explicitly. The 1:1 path above avoids filter and transform changes entirely.
   XTransform transform = {{{XDoubleToFixed(double(width()) / w), 0, 0},
                            {0, XDoubleToFixed(double(height()) / h), 0},
                            {0, 0, XDoubleToFixed(1)}}};
@@ -67,8 +82,15 @@ void Surface::drawScaled(Surface* dst, int x, int y, int w, int h)
   XRenderChangePicture(fl_display, picture, CPRepeat, &attrs);
   Picture target = dst ? dst->picture
     : XRenderCreatePicture(fl_display, fl_window, visFormat, 0, NULL);
+  XRectangle clip = { (short)clip_x, (short)clip_y,
+                      (unsigned short)clip_w, (unsigned short)clip_h };
+  XRenderSetPictureClipRectangles(fl_display, target, 0, 0, &clip, 1);
+  // Preserve the original sampling origin: offset composites can shift
+  // bilinear rounding by a channel value on fractional scale factors.
   XRenderComposite(fl_display, PictOpSrc, picture, None, target,
                    0, 0, 0, 0, x, y, w, h);
+  attrs.clip_mask = None;
+  XRenderChangePicture(fl_display, target, CPClipMask, &attrs);
   if (!dst) XRenderFreePicture(fl_display, target);
   XTransform identity = {{{XDoubleToFixed(1), 0, 0},
                           {0, XDoubleToFixed(1), 0},

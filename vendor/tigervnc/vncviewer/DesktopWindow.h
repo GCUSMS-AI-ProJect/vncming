@@ -36,6 +36,7 @@ class Surface;
 class Viewport;
 
 class Fl_Scrollbar;
+class Fl_Button;
 
 #ifdef __GNUC__
 #  define __printf_attr(a, b) __attribute__((__format__ (__printf__, a, b)))
@@ -49,6 +50,7 @@ public:
   DesktopWindow(int w, int h, const char *name,
                 const rfb::PixelFormat& serverPF, CConn* cc_);
   ~DesktopWindow();
+  void fitRemoteWindow();
 
   // Most efficient format (from DesktopWindow's point of view)
   const rfb::PixelFormat &getPreferredPF();
@@ -114,6 +116,8 @@ private:
   void remoteResize(int width, int height);
 
   void repositionWidgets();
+  int toolbarHeight() const { return transferButton ? 44 : 0; }
+  int contentHeight() const { return h() > toolbarHeight() ? h() - toolbarHeight() : 1; }
 
   static void handleClose(Fl_Widget *wnd, void *data);
 
@@ -131,6 +135,7 @@ private:
   CConn* cc;
   Fl_Scrollbar *hscroll, *vscroll;
   Viewport *viewport;
+  Fl_Button *transferButton;
   Surface *offscreen;
   Surface *overlay;
   unsigned char overlayAlpha;

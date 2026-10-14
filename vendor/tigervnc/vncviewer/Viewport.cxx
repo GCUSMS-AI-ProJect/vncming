@@ -24,6 +24,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef __linux__
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/syscall.h>
+#endif
 
 #include <rfb/CMsgWriter.h>
 #include <rfb/LogWriter.h>
@@ -56,6 +61,7 @@
 #endif
 
 #include "Viewport.h"
+#include "ScaledDamage.h"
 #include "CConn.h"
 #include "OptionsDialog.h"
 #include "DesktopWindow.h"
@@ -106,7 +112,7 @@ static rfb::LogWriter vlog("Viewport");
 
 enum { ID_DISCONNECT, ID_FULLSCREEN, ID_MINIMIZE, ID_RESIZE,
        ID_CTRL, ID_ALT, ID_MENUKEY, ID_CTRLALTDEL,
-       ID_REFRESH, ID_OPTIONS, ID_INFO, ID_ABOUT };
+       ID_REFRESH, ID_OPTIONS, ID_INFO, ID_ABOUT, ID_FILES };
 
 // Used to detect fake input (0xaa is not a real key)
 #ifdef WIN32
@@ -237,7 +243,10 @@ void Viewport::updateWindow()
   Rect r;
 
   r = frameBuffer->getDamage();
-  if (fitToWindow) { redraw(); return; }
+  if (r.is_empty()) return;
+  if (fitToWindow)
+    r = scaledDamage(r, frameBuffer->width(), frameBuffer->height(), w(), h());
+  if (r.is_empty()) return;
   damage(FL_DAMAGE_USER1, r.tl.x + x(), r.tl.y + y(), r.width(), r.height());
 }
 
@@ -525,15 +534,19 @@ void Viewport::pushLEDState()
 
 void Viewport::draw(Surface* dst)
 {
-#if !defined(WIN32) && !defined(__APPLE__)
-  if (fitToWindow) { frameBuffer->drawScaled(dst, x(), y(), w(), h()); return; }
-#endif
   int X, Y, W, H;
 
   // Check what actually needs updating
   fl_clip_box(x(), y(), w(), h(), X, Y, W, H);
   if ((W == 0) || (H == 0))
     return;
+
+#if !defined(WIN32) && !defined(__APPLE__)
+  if (fitToWindow) {
+    frameBuffer->drawScaled(dst, x(), y(), w(), h(), X, Y, W, H);
+    return;
+  }
+#endif
 
   frameBuffer->draw(dst, X - x(), Y - y(), X, Y, W, H);
 }
@@ -541,15 +554,19 @@ void Viewport::draw(Surface* dst)
 
 void Viewport::draw()
 {
-#if !defined(WIN32) && !defined(__APPLE__)
-  if (fitToWindow) { frameBuffer->drawScaled(NULL, x(), y(), w(), h()); return; }
-#endif
   int X, Y, W, H;
 
   // Check what actually needs updating
   fl_clip_box(x(), y(), w(), h(), X, Y, W, H);
   if ((W == 0) || (H == 0))
     return;
+
+#if !defined(WIN32) && !defined(__APPLE__)
+  if (fitToWindow) {
+    frameBuffer->drawScaled(NULL, x(), y(), w(), h(), X, Y, W, H);
+    return;
+  }
+#endif
 
   frameBuffer->draw(X - x(), Y - y(), X, Y, W, H);
 }
@@ -1316,6 +1333,11 @@ void Viewport::initContextMenu()
 
   fltk_menu_add(contextMenu, p_("ContextMenu|", "连接选项…"),
                 0, NULL, (void*)ID_OPTIONS, 0);
+#ifdef __linux__
+  if (getenv("VNCMING_TRANSFER_LAUNCHER") && getenv("VNCMING_TRANSFER_ADDRESS"))
+    fltk_menu_add(contextMenu, p_("ContextMenu|", "文件传输…"),
+                  0, NULL, (void*)ID_FILES, 0);
+#endif
   fltk_menu_add(contextMenu, p_("ContextMenu|", "连接信息…"),
                 0, NULL, (void*)ID_INFO, 0);
   fltk_menu_add(contextMenu, p_("ContextMenu|", "关于 VNCMing…"),
@@ -1358,6 +1380,9 @@ void Viewport::popupContextMenu()
   case ID_DISCONNECT:
     disconnect();
     break;
+  case ID_FILES:
+    openFileTransfer();
+    break;
   case ID_FULLSCREEN:
     if (window()->fullscreen_active())
       window()->fullscreen_off();
@@ -1370,7 +1395,7 @@ void Viewport::popupContextMenu()
   case ID_RESIZE:
     if (window()->fullscreen_active())
       break;
-    window()->size(w(), h());
+    ((DesktopWindow*)window())->fitRemoteWindow();
     break;
   case ID_CTRL:
     if (m->value())
@@ -1430,4 +1455,27 @@ void Viewport::handleOptions(void *data)
 
   self->setMenuKey();
   // FIXME: Need to recheck cursor for dotWhenNoCursor
+}
+
+void Viewport::openFileTransfer()
+{
+#ifdef __linux__
+  const char *launcher = getenv("VNCMING_TRANSFER_LAUNCHER");
+  const char *address = getenv("VNCMING_TRANSFER_ADDRESS");
+  if (!launcher || !address) return;
+  pid_t child = fork();
+  if (child == 0) {
+    pid_t detached = fork();
+    if (detached < 0) _exit(1);
+    if (detached > 0) _exit(0);
+    setsid();
+    // Never carry the VNC socket or credential pipe into the file browser.
+    syscall(SYS_close_range, 3u, ~0u, 0u);
+    unsetenv("VNCMING_CREDENTIALS_FD");
+    unsetenv("VNCMING_STATUS_FD");
+    execl(launcher, launcher, "--files", address, (char*)NULL);
+    _exit(127);
+  }
+  if (child > 0) waitpid(child, NULL, 0);
+#endif
 }

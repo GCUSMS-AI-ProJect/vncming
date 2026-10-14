@@ -42,9 +42,14 @@ def main():
         work = Path(directory)
         stage = work / 'debian/vncming'
         program = stage / 'usr/lib/vncming'
-        for name in ('viewer.py', 'credentials.py', 'motion.py', 'theme.css'):
-            copy(ROOT / 'app' / name, program / 'app' / name)
+        for path in (ROOT / 'app').iterdir():
+            if path.suffix in ('.py', '.css'):
+                copy(path, program / 'app' / path.name)
         copy(ROOT / 'assets/vncming-orange.png', program / 'assets/vncming-orange.png')
+        for directory in ('transfer', 'actions'):
+            for path in (ROOT / 'assets' / directory).iterdir():
+                if path.is_file():
+                    copy(path, program / 'assets' / directory / path.name)
         copy(ROOT / 'vncming', program / 'vncming')
         (program / 'vncming').chmod(0o755)
         native = program / 'build/vncviewer/vncviewer'
@@ -108,7 +113,7 @@ def main():
         control = stage / 'DEBIAN'
         write(control / 'control', basic_control +
               f'Installed-Size: {(size + 1023) // 1024}\n'
-              f'Depends: {native_dependencies}, python3 (>= 3.10), python3-gi, python3-pil, '
+              f'Depends: {native_dependencies}, python3 (>= 3.10), python3-gi, python3-pil, python3-paramiko, '
               'gir1.2-gtk-3.0, gir1.2-secret-1, fonts-noto-cjk\n'
               'Recommends: gnome-keyring\n'
               f'Homepage: {HOMEPAGE}\n'
