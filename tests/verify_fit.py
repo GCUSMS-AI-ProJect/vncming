@@ -123,7 +123,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             info=subprocess.run(['xwininfo','-id',window],capture_output=True,text=True).stdout
             def field(name): return int(re.search(name+r':\s+(-?\d+)',info)[1])
             width,height=field('Width'),field('Height')
-            top = 44 if '--toolbar' in sys.argv else 0
+            top = 0
             area_height = height - top
             root=Gdk.get_default_root_window()
             image=Gdk.pixbuf_get_from_window(root,field('Absolute upper-left X'),field('Absolute upper-left Y'),width,height)
@@ -134,8 +134,9 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
                 px,py=int(196*width/800),top+int(256*area_height/600)
                 offset=py*stride+px*channels
                 assert tuple(data[offset:offset+3])==(255,0,255), 'incremental patch was not rendered'
-            # Keep the white sample away from the desktop's floating input method.
-            for x,y,expected in [(width//4,top+area_height//4,(255,0,0)),(3*width//4,top+area_height//4,(0,255,0)),(20,height-60,(0,0,255)),(3*width//4,top+3*area_height//4,(255,255,255))]:
+            # Keep upper samples outside the centered startup F8 hint, and the
+            # white sample away from the desktop's floating input method.
+            for x,y,expected in [(20,top+area_height//4,(255,0,0)),(width-20,top+area_height//4,(0,255,0)),(20,height-60,(0,0,255)),(3*width//4,top+3*area_height//4,(255,255,255))]:
                 offset=y*stride+x*channels
                 assert tuple(data[offset:offset+3]) == expected, (width,height,x,y,tuple(data[offset:offset+3]))
             subprocess.run(['xdotool','windowactivate','--sync',window,'mousemove','--window',window,str(width//4),str(top+area_height//4),'click','1'],check=True)
@@ -162,7 +163,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             assert inspect() == (600,450)
         assert not errors,errors
         if resize_supported and (fullscreen or fixed_resolution):
-            target = (dimensions[0], dimensions[1] - (44 if '--toolbar' in sys.argv else 0)) if dynamic_resolution else (fixed_resolution or resolution or (1920,1080))
+            target = (dimensions[0], dimensions[1]) if dynamic_resolution else (fixed_resolution or resolution or (1920,1080))
             assert resize_requests and resize_requests[-1] == target,resize_requests
             if not dynamic_resolution:
                 assert all(size == target for size in resize_requests),resize_requests

@@ -23,6 +23,7 @@ server=socket.socket(); server.bind(('127.0.0.1',0));server.listen(1)
 port=server.getsockname()[1]
 ready=threading.Event()
 pointer_clicks=[]
+pointer_events=[]
 def serve():
  try:
   s,_=server.accept();s.settimeout(30)
@@ -58,6 +59,7 @@ def serve():
    elif kind==4: read(7)
    elif kind==5:
     pointer=struct.unpack('!BHH',read(5))
+    pointer_events.append(pointer)
     if pointer[0] & 1: pointer_clicks.append(pointer)
    elif kind==6:
     read(3);n=struct.unpack('!I',read(4))[0];read(n)
@@ -115,6 +117,8 @@ try:
   width=int(re.search(r'Width:\s+(\d+)',info)[1])
   before=len(pointer_clicks)
   if transfer_result.exists(): transfer_result.unlink()
+  subprocess.run(['xdotool','mousemove','--window',desktop,str(width-32),'1'],check=True)
+  time.sleep(.35)
   subprocess.run(['xdotool','mousemove','--window',desktop,str(width-32),'22','click','1'],check=True)
   for _ in range(30):
    if transfer_result.exists(): break
@@ -123,7 +127,19 @@ try:
   assert transfer_result.read_text().splitlines()==['--files','127.0.0.1::'+str(port)]
   time.sleep(.1)
   assert len(pointer_clicks)==before, 'Transfer button click reached the remote desktop'
+ # Inspect the native window itself, using only the synthetic RFB fixture.
+ def panel_pixel():
+  info=subprocess.run(['xwininfo','-id',desktop],capture_output=True,text=True).stdout
+  x=int(re.search(r'Absolute upper-left X:\s+(-?\d+)',info)[1])
+  y=int(re.search(r'Absolute upper-left Y:\s+(-?\d+)',info)[1])
+  image=Gdk.pixbuf_get_from_window(Gdk.get_default_root_window(),x+80,y+22,1,1)
+  return tuple(image.get_pixels()[:3])
+ subprocess.run(['xdotool','mousemove','--window',desktop,'300','200'],check=True)
+ time.sleep(.6)
+ hidden_pixel=panel_pixel()
+ assert hidden_pixel != (246,245,243), hidden_pixel
  click_transfer_button()
+ assert panel_pixel() == (246,245,243), panel_pixel()
  before=len(pointer_clicks)
  subprocess.run(['xdotool','mousemove','--window',desktop,'80','22','click','1'],check=True)
  time.sleep(.2)
@@ -131,7 +147,39 @@ try:
  if '--fullscreen' not in sys.argv:
   subprocess.run(['xdotool','mousemove','--window',desktop,'100','94','click','1'],check=True)
   time.sleep(.2)
-  assert pointer_clicks[-1][1:]==(100,50), pointer_clicks
+  assert pointer_clicks[-1][1:]==(100,94), pointer_clicks
+ subprocess.run(['xdotool','mousemove','--window',desktop,'300','200'],check=True)
+ time.sleep(.6)
+ assert panel_pixel() == hidden_pixel, 'Panel left stale pixels after hiding'
+ before=len(pointer_clicks)
+ if '--fullscreen' in sys.argv:
+  info=subprocess.run(['xwininfo','-id',desktop],capture_output=True,text=True).stdout
+  px=int(re.search(r'Width:\s+(\d+)',info)[1])//2
+  py=int(re.search(r'Height:\s+(\d+)',info)[1])//2
+ else:
+  px,py=80,22
+ subprocess.run(['xdotool','mousemove','--window',desktop,str(px),str(py),'click','1'],check=True)
+ time.sleep(.15)
+ assert len(pointer_clicks) > before, 'Hidden panel blocked remote input'
+ # Reversing an in-progress hide must not leave the panel stuck or flash.
+ subprocess.run(['xdotool','mousemove','--window',desktop,'80','1'],check=True)
+ time.sleep(.3)
+ subprocess.run(['xdotool','mousemove','--window',desktop,'300','200'],check=True)
+ time.sleep(.35)
+ subprocess.run(['xdotool','mousemove','--window',desktop,'80','1'],check=True)
+ time.sleep(.3)
+ assert panel_pixel() == (246,245,243)
+ subprocess.run(['xdotool','mousemove','--window',desktop,'300','200'],check=True)
+ time.sleep(.6)
+ assert panel_pixel() == hidden_pixel
+ if '--fullscreen' not in sys.argv:
+  subprocess.run(['xdotool','mousemove','--window',desktop,'100','94','mousedown','1',
+                  'mousemove','--window',desktop,'100','1'],check=True)
+  time.sleep(.35)
+  assert panel_pixel() == hidden_pixel, 'Remote drag revealed the panel'
+  subprocess.run(['xdotool','mouseup','1'],check=True)
+  time.sleep(.15)
+  assert pointer_events[-1][0] == 0, 'Remote drag lost its release'
  capture('remote-transfer-button'+('-fullscreen' if '--fullscreen' in sys.argv else '')+'.png')
  if '--fullscreen' not in sys.argv:
   subprocess.run(['xdotool','windowsize',desktop,'1000','650'],check=True)
@@ -140,7 +188,7 @@ try:
   subprocess.run(['xdotool','windowsize',desktop,'800','480'],check=True)
   time.sleep(.4)
  transfer_result.unlink()
- result['visible_file_transfer_button']=True
+ result['auto_hide_file_transfer_panel']=True
  subprocess.run(['xdotool','mousemove','--window',desktop,'300','200','click','1'],check=True)
  keys(desktop,'F8')
  time.sleep(.3)

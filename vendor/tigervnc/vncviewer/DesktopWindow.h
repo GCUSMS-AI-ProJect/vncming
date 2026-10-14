@@ -116,8 +116,12 @@ private:
   void remoteResize(int width, int height);
 
   void repositionWidgets();
-  int toolbarHeight() const { return transferButton ? 44 : 0; }
+  // The reveal panel overlays the framebuffer, never changing its geometry.
+  int toolbarHeight() const { return 0; }
   int contentHeight() const { return h() > toolbarHeight() ? h() - toolbarHeight() : 1; }
+  void revealToolbar(bool show);
+  static void animateToolbar(void *data);
+  static void hideToolbar(void *data);
 
   static void handleClose(Fl_Widget *wnd, void *data);
 
@@ -136,6 +140,7 @@ private:
   Fl_Scrollbar *hscroll, *vscroll;
   Viewport *viewport;
   Fl_Button *transferButton;
+  double toolbarOffset, toolbarFrom, toolbarTarget, toolbarStarted;
   Surface *offscreen;
   Surface *overlay;
   unsigned char overlayAlpha;

@@ -23,6 +23,8 @@
 
 #include <assert.h>
 #include <string>
+#include <chrono>
+#include <cmath>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
@@ -105,7 +107,9 @@ public:
 DesktopWindow::DesktopWindow(int w, int h, const char *name,
                              const rfb::PixelFormat& serverPF,
                              CConn* cc_)
-  : Fl_Window(w, h), cc(cc_), transferButton(NULL), offscreen(NULL), overlay(NULL),
+  : Fl_Window(w, h), cc(cc_), transferButton(NULL),
+    toolbarOffset(-44), toolbarFrom(-44), toolbarTarget(-44), toolbarStarted(0),
+    offscreen(NULL), overlay(NULL),
     firstUpdate(true),
     delayedFullscreen(false), delayedDesktopSize(false),
     keyboardGrabbed(false), mouseGrabbed(false),
@@ -133,6 +137,7 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
 #ifdef __linux__
   if (getenv("VNCMING_TRANSFER_LAUNCHER") && getenv("VNCMING_TRANSFER_ADDRESS")) {
     transferButton = new TransferButton(w - 52, 5);
+    transferButton->hide();
     transferButton->callback([](Fl_Widget*, void* data) {
       DesktopWindow* self = static_cast<DesktopWindow*>(data);
       self->viewport->openFileTransfer();
@@ -268,6 +273,8 @@ DesktopWindow::~DesktopWindow()
   Fl::remove_timeout(handleStatsTimeout, this);
   Fl::remove_timeout(menuOverlay, this);
   Fl::remove_timeout(updateOverlay, this);
+  Fl::remove_timeout(animateToolbar, this);
+  Fl::remove_timeout(hideToolbar, this);
 
   OptionsDialog::removeCallback(handleOptions);
 
@@ -590,21 +597,21 @@ void DesktopWindow::draw()
     update_child(*hscroll);
     update_child(*vscroll);
   }
-  if (transferButton) {
-    // Application chrome has its own area, outside the remote framebuffer.
-    fl_push_clip(0, 0, w(), toolbarHeight());
-    fl_rectf(0, 0, w(), toolbarHeight(), 246, 245, 243);
+  if (transferButton && toolbarOffset > -44) {
+    const int top = static_cast<int>(std::lround(toolbarOffset));
+    fl_push_clip(0, 0, w(), top + 44);
+    fl_rectf(0, top, w(), 44, 246, 245, 243);
     fl_color(fl_rgb_color(228, 223, 217));
-    fl_line(0, toolbarHeight()-1, w(), toolbarHeight()-1);
+    fl_line(0, top+43, w(), top+43);
     fl_color(fl_rgb_color(48, 128, 83));
-    fl_pie(16, 18, 8, 8, 0, 360);
+    fl_pie(16, top+18, 8, 8, 0, 360);
     fl_color(fl_rgb_color(81, 74, 67));
     fl_font(FL_HELVETICA, 14);
     const char* address = getenv("VNCMING_TRANSFER_ADDRESS");
     std::string status = "已连接";
     if (address && *address) status += std::string(" · ") + address;
-    fl_push_clip(32, 0, std::max(0, w()-100), toolbarHeight());
-    fl_draw(status.c_str(), 32, 0, std::max(0, w()-100), toolbarHeight(), FL_ALIGN_LEFT);
+    fl_push_clip(32, top, std::max(0, w()-100), 44);
+    fl_draw(status.c_str(), 32, top, std::max(0, w()-100), 44, FL_ALIGN_LEFT);
     fl_pop_clip();
     draw_child(*transferButton);
     fl_pop_clip();
@@ -856,11 +863,74 @@ void DesktopWindow::updateOverlay(void *data)
 }
 
 
+static double toolbarClock()
+{
+  return std::chrono::duration<double>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void DesktopWindow::revealToolbar(bool show)
+{
+  const double target = show ? 0 : -44;
+  if (!transferButton || toolbarTarget == target)
+    return;
+  toolbarFrom = toolbarOffset;
+  toolbarTarget = target;
+  toolbarStarted = toolbarClock();
+  if (show) transferButton->show();
+  Fl::remove_timeout(animateToolbar, this);
+  Fl::add_timeout(0, animateToolbar, this);
+}
+
+void DesktopWindow::animateToolbar(void *data)
+{
+  DesktopWindow* self = static_cast<DesktopWindow*>(data);
+  const double t = std::min(1.0, (toolbarClock() - self->toolbarStarted) / 0.22);
+  const double ease = 1 - std::pow(1 - t, 3);
+  self->toolbarOffset = self->toolbarFrom + (self->toolbarTarget - self->toolbarFrom) * ease;
+  self->transferButton->position(std::max(4, self->w()-52),
+    static_cast<int>(std::lround(self->toolbarOffset)) + 5);
+  // Restore the framebuffer beneath the panel; only repaint the top strip.
+  self->damage(FL_DAMAGE_CHILD, 0, 0, self->w(), 44);
+  if (t < 1)
+    Fl::repeat_timeout(1.0/60, animateToolbar, self);
+  else if (self->toolbarTarget == -44)
+    self->transferButton->hide();
+}
+
+void DesktopWindow::hideToolbar(void *data)
+{
+  DesktopWindow* self = static_cast<DesktopWindow*>(data);
+  if (Fl::pushed() == self->transferButton) {
+    Fl::repeat_timeout(0.1, hideToolbar, self);
+    return;
+  }
+  self->revealToolbar(false);
+}
+
 int DesktopWindow::handle(int event)
 {
-  // Empty toolbar space must never send mouse presses/moves to the server.
-  if (transferButton && Fl::event_y() < toolbarHeight() &&
-      (event == FL_PUSH || event == FL_MOVE || event == FL_MOUSEWHEEL)) {
+  if (transferButton && (event == FL_ENTER || event == FL_MOVE || event == FL_LEAVE)) {
+    const bool inside = event != FL_LEAVE && Fl::event_x() >= 0 &&
+      Fl::event_x() < w() && Fl::event_y() >= 0;
+    const bool edge = inside && Fl::event_y() < 3;
+    const bool panel = inside && toolbarTarget == 0 && Fl::event_y() < 44;
+    if ((edge || panel) && !(Fl::event_state() & FL_BUTTONS)) {
+      Fl::remove_timeout(hideToolbar, this);
+      revealToolbar(true);
+    } else if (toolbarTarget == 0 && !Fl::has_timeout(hideToolbar, this)) {
+      Fl::add_timeout(0.3, hideToolbar, this);
+    }
+    if (edge && !(Fl::event_state() & FL_BUTTONS)) {
+      if (event == FL_ENTER && keyboardGrabbed) grabPointer();
+      return 1;
+    }
+  }
+  // Only the currently visible overlay intercepts clicks. An in-progress
+  // remote drag retains its release even if the pointer crosses the panel.
+  if (transferButton && Fl::pushed() != viewport && Fl::event_y() >= 0 &&
+      Fl::event_y() < 44 + static_cast<int>(std::lround(toolbarOffset)) &&
+      (event == FL_PUSH || event == FL_RELEASE || event == FL_MOVE || event == FL_MOUSEWHEEL)) {
     if (Fl::event_inside(transferButton))
       return Fl_Window::handle(event);
     return 1;
@@ -1478,7 +1548,8 @@ void DesktopWindow::remoteResize(int width, int height)
 void DesktopWindow::repositionWidgets()
 {
   if (transferButton)
-    transferButton->resize(std::max(4, w() - 52), 5, 40, 34);
+    transferButton->resize(std::max(4, w() - 52),
+      static_cast<int>(std::lround(toolbarOffset)) + 5, 40, 34);
   if (fitToWindow) {
     viewport->setDisplaySize(w(), contentHeight());
     viewport->position(0, toolbarHeight());
