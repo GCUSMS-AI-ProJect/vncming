@@ -37,6 +37,7 @@ class Viewport;
 
 class Fl_Scrollbar;
 class Fl_Button;
+class Fl_Choice;
 
 #ifdef __GNUC__
 #  define __printf_attr(a, b) __attribute__((__format__ (__printf__, a, b)))
@@ -140,6 +141,7 @@ private:
   Fl_Scrollbar *hscroll, *vscroll;
   Viewport *viewport;
   Fl_Button *transferButton;
+  Fl_Choice *resolutionChoice;
   double toolbarOffset, toolbarFrom, toolbarTarget, toolbarStarted;
   Surface *offscreen;
   Surface *overlay;

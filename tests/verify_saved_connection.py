@@ -214,6 +214,28 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         marker = row.get_child().get_children()[0].get_children()[-1]
         assert marker.get_label() == '最近保存'
         result['newest_first_and_username_address_deduplication'] = True
+        incoming, outgoing = socket.socketpair(type=socket.SOCK_DGRAM)
+        incoming.setblocking(False)
+        user, secret = b'updated-user', b'updated-password'
+        outgoing.send(struct.pack('!II', len(user), len(secret)) + user + secret)
+        saved['ssh_port'] = 2222
+        assert window.poll_saved_credentials(None, incoming, saved['address'], saved['credential_id']) is False
+        outgoing.close()
+        updated = window.entries[0]
+        assert updated['name'] == 'Saved Test' and updated['username'] == 'updated-user'
+        assert updated['credential_id'] == saved['credential_id'] and updated['ssh_port'] == 2222
+        assert credentials.lookup(updated['credential_id']) == 'updated-password'
+        assert 'updated-password' not in viewer.DATA.read_text()
+        # Saving must not restore a device deleted while login was open.
+        incoming, outgoing = socket.socketpair(type=socket.SOCK_DGRAM)
+        outgoing.send(struct.pack('!II', len(user), len(secret)) + user + secret)
+        before = window.entries.copy()
+        window.poll_saved_credentials(None, incoming, saved['address'], 'deleted-device')
+        outgoing.close()
+        assert window.entries == before
+        result['authentication_feedback_saved_to_keyring'] = True
+        window.save_connection('Saved Test', '127.0.0.1', 'test-user', 'test-password', index=0)
+        saved = window.entries[0]
         server = socket.socket()
         server.bind(('127.0.0.1', 0))
         server.listen(1)

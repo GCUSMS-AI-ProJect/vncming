@@ -22,6 +22,10 @@ result={}
 server=socket.socket(); server.bind(('127.0.0.1',0));server.listen(1)
 port=server.getsockname()[1]
 ready=threading.Event()
+auth_received=threading.Event()
+continue_initialization=threading.Event()
+save_reader,save_writer=socket.socketpair(type=socket.SOCK_DGRAM)
+save_reader.setblocking(False)
 pointer_clicks=[]
 pointer_events=[]
 def serve():
@@ -43,6 +47,8 @@ def serve():
   u,p=struct.unpack('!II',read(8))
   result['authentication']=read(u)==b'test-user' and read(p)==b'test-password'
   read(1)
+  auth_received.set()
+  assert continue_initialization.wait(10)
   pixel=struct.pack('!BBBBHHHBBB3x',32,24,0,1,255,255,255,16,8,0)
   name=('VNCMing UI Test '+str(port)).encode()
   s.sendall(struct.pack('!HH',800,480)+pixel+struct.pack('!I',len(name))+name)
@@ -75,7 +81,7 @@ transfer_result = Path(transfer_fixture.name) / 'arguments'
 transfer_launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(transfer_result) + '"\n')
 transfer_launcher.chmod(0o755)
 log=(OUTPUT/'ui-check.log').open('w')
-proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen='+str(int('--fullscreen' in sys.argv)),'-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,env={**os.environ,"XMODIFIERS":"@im=none", 'VNCMING_TRANSFER_LAUNCHER': str(transfer_launcher), 'VNCMING_TRANSFER_ADDRESS': '127.0.0.1::'+str(port)})
+proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen='+str(int('--fullscreen' in sys.argv)),'-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,pass_fds=(save_writer.fileno(),),env={**os.environ,"XMODIFIERS":"@im=none", "VNCMING_SAVE_CREDENTIALS_FD":str(save_writer.fileno()), 'VNCMING_ICON': str(ROOT/'assets/vncming-orange.png'), 'VNCMING_TRANSFER_LAUNCHER': str(transfer_launcher), 'VNCMING_TRANSFER_ADDRESS': '127.0.0.1::'+str(port)})
 def find(title):
  import re
  for _ in range(100):
@@ -105,14 +111,32 @@ try:
  subprocess.run(['xdotool','type','--clearmodifiers','--file','-'],input='test-user',text=True,check=True)
  keys(auth,'Tab')
  subprocess.run(['xdotool','type','--clearmodifiers','--file','-'],input='test-password',text=True,check=True)
- subprocess.run(['xdotool','mousemove','--window',auth,'380','239','click','1'],check=True)
+ if '--no-save' in sys.argv:
+  subprocess.run(['xdotool','mousemove','--window',auth,'124','224','click','1'],check=True)
+ subprocess.run(['xdotool','mousemove','--window',auth,'380','273','click','1'],check=True)
+ assert auth_received.wait(10), result
+ try:
+  save_reader.recv(8201)
+  raise AssertionError('Credentials saved before authentication completed')
+ except BlockingIOError: pass
+ continue_initialization.set()
  time.sleep(.5)
  capture('submitted-preview.png')
  assert ready.wait(10),('RFB fixture not initialized',result)
+ if '--no-save' in sys.argv:
+  assert save_reader.recv(8201)==b'\0', 'Unchecked credentials must not be saved'
+  result['unchecked_credentials_not_saved']=True
+ else:
+  packet=save_reader.recv(8201)
+  u,p=struct.unpack('!II',packet[:8])
+  assert packet[8:8+u]==b'test-user' and packet[8+u:]==b'test-password'
+  assert len(packet)==8+u+p
+  result['default_checked_saves_only_after_authentication']=True
  desktop=find('VNCMing UI Test '+str(port))
  time.sleep(.5)
  import re
  def click_transfer_button():
+  subprocess.run(['xdotool','windowactivate','--sync',desktop],check=True)
   info=subprocess.run(['xwininfo','-id',desktop],capture_output=True,text=True).stdout
   width=int(re.search(r'Width:\s+(\d+)',info)[1])
   before=len(pointer_clicks)
@@ -233,6 +257,7 @@ finally:
  try: proc.wait(5)
  except subprocess.TimeoutExpired: proc.kill();proc.wait()
  log.close()
+ save_reader.close();save_writer.close()
  transfer_fixture.cleanup()
 (OUTPUT/'ui-check.json').write_text(json.dumps(result,indent=2))
 print(json.dumps(result))

@@ -168,6 +168,23 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             if not dynamic_resolution:
                 assert all(size == target for size in resize_requests),resize_requests
             assert tuple(remote_dimensions) == target,remote_dimensions
+        if '--toolbar' in sys.argv and maximized and fixed_resolution and not late_resize_supported:
+            info=subprocess.check_output(["xwininfo","-id",window],text=True)
+            width=int(re.search(r"Width:\s+(\d+)",info)[1])
+            before = len(points)
+            subprocess.run(['xdotool','mousemove','--window',window,str(width-145),'1'],check=True)
+            time.sleep(.35)
+            subprocess.run(['xdotool','mousemove','--window',window,str(width-145),'22','click','1'],check=True)
+            time.sleep(.2)
+            subprocess.run(['xdotool','key','Up','Up','Return'],check=True)
+            for _ in range(60):
+                if tuple(remote_dimensions)==(1280,720): break
+                time.sleep(.05)
+            assert tuple(remote_dimensions)==(1280,720), ('Toolbar resolution selection failed',resize_requests)
+            assert len(points)==before, 'Resolution choice leaked a remote click'
+            subprocess.run(['xdotool','mousemove','--window',window,'300','200'],check=True)
+            time.sleep(.8)
+            inspect()
         return {'fullscreen':fullscreen,'maximized':maximized,'dimensions':dimensions,'remote_dimensions':remote_dimensions,'complete_image':True,'pointer_mapping':True,'resize_requests':resize_requests}
     finally:
         process.terminate();process.wait(3)

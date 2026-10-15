@@ -44,6 +44,8 @@
 #include "MacMotion.h"
 
 #include <FL/Fl.H>
+#include <FL/Fl_PNG_Image.H>
+#include "StyledMessage.h"
 #include <FL/Fl_Image_Surface.H>
 #include <FL/Fl_Scrollbar.H>
 #include <FL/fl_draw.H>
@@ -79,35 +81,33 @@ static rfb::LogWriter vlog("DesktopWindow");
 // issue for Fl::event_dispatch.
 static std::set<DesktopWindow *> instances;
 
-// Native vector icon remains sharp at every desktop scale.
+// Rendered from assets/transfer/toolbar-transfer.svg for FLTK 1.3.
 class TransferButton : public MacButton {
+  Fl_PNG_Image* icon;
 public:
-  TransferButton(int x, int y) : MacButton(x, y, 40, 34) {
+  TransferButton(int x, int y) : MacButton(x, y, 40, 34), icon(NULL) {
     color(fl_rgb_color(250, 249, 247));
-    tooltip("打开此设备的文件传输窗口");
+    tooltip("文件传输");
     clear_visible_focus();
+    const char* asset = getenv("VNCMING_ICON");
+    if (asset) {
+      std::string path(asset);
+      path = path.substr(0, path.find_last_of('/')) + "/transfer/toolbar-transfer.png";
+      icon = new Fl_PNG_Image(path.c_str());
+    }
+    if (!icon || icon->fail()) copy_label("⇄");
   }
+  ~TransferButton() { delete icon; }
   void draw() {
     MacButton::draw();
-    fl_color(fl_rgb_color(164, 77, 20));
-    fl_line_style(FL_SOLID, 2);
-    int px = x() + (w() - 19) / 2, py = y() + (h() - 16) / 2;
-    fl_line(px, py+14, px, py+2);
-    fl_line(px, py+2, px+7, py+2);
-    fl_line(px+7, py+2, px+10, py+5);
-    fl_line(px+10, py+5, px+19, py+5);
-    fl_line(px+19, py+5, px+19, py+14);
-    fl_line(px, py+14, px+19, py+14);
-    fl_line(px+5, py+9, px+15, py+9);
-    fl_line(px+12, py+6, px+15, py+9, px+12, py+12);
-    fl_line_style(0);
+    if (icon && !icon->fail()) icon->draw(x()+(w()-24)/2, y()+(h()-24)/2);
   }
 };
 
 DesktopWindow::DesktopWindow(int w, int h, const char *name,
                              const rfb::PixelFormat& serverPF,
                              CConn* cc_)
-  : Fl_Window(w, h), cc(cc_), transferButton(NULL),
+  : Fl_Window(w, h), cc(cc_), transferButton(NULL), resolutionChoice(NULL),
     toolbarOffset(-44), toolbarFrom(-44), toolbarTarget(-44), toolbarStarted(0),
     offscreen(NULL), overlay(NULL),
     firstUpdate(true),
@@ -145,6 +145,35 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
     }, this);
   }
 #endif
+
+  resolutionChoice = new ModernChoice(std::max(4, w-228), 5, 164, 34);
+  resolutionChoice->add("保持当前分辨率|随窗口调整|1280×720|1600×900|1920×1080|2560×1440|3840×2160");
+  const char* sizes[] = {"", "", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
+  int selected = ::remoteResize ? 1 : 0;
+  for (int i=2; i<7; ++i) if (strcmp(desktopSize, sizes[i]) == 0) selected=i;
+  resolutionChoice->value(selected);
+  resolutionChoice->tooltip("远程分辨率（需要服务器支持）");
+  resolutionChoice->hide();
+  resolutionChoice->callback([](Fl_Widget* widget, void* data) {
+    DesktopWindow* self = static_cast<DesktopWindow*>(data);
+    Fl_Choice* choice = static_cast<Fl_Choice*>(widget);
+    const char* sizes[] = {"", "", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
+    int selected = choice->value();
+    if (selected != 0 && !self->cc->server.supportsSetDesktopSize) {
+      vncAlert("此服务器尚未支持修改远程分辨率。当前画面分辨率保持不变。");
+      int previous = ::remoteResize ? 1 : 0;
+      for (int i=2; i<7; ++i)
+        if (strcmp(desktopSize, sizes[i]) == 0) previous=i;
+      choice->value(previous);
+    } else {
+      Fl::remove_timeout(handleResizeTimeout, self);
+      desktopSize.setParam(sizes[selected]);
+      fullScreenDesktopSize.setParam("");
+      ::remoteResize.setParam(selected == 1);
+      self->scheduleDesktopSize();
+    }
+    self->viewport->take_focus();
+  }, this);
 
   h += toolbarHeight();
 
@@ -597,7 +626,7 @@ void DesktopWindow::draw()
     update_child(*hscroll);
     update_child(*vscroll);
   }
-  if (transferButton && toolbarOffset > -44) {
+  if (resolutionChoice && toolbarOffset > -44) {
     const int top = static_cast<int>(std::lround(toolbarOffset));
     fl_push_clip(0, 0, w(), top + 44);
     fl_rectf(0, top, w(), 44, 246, 245, 243);
@@ -610,10 +639,11 @@ void DesktopWindow::draw()
     const char* address = getenv("VNCMING_TRANSFER_ADDRESS");
     std::string status = "已连接";
     if (address && *address) status += std::string(" · ") + address;
-    fl_push_clip(32, top, std::max(0, w()-100), 44);
-    fl_draw(status.c_str(), 32, top, std::max(0, w()-100), 44, FL_ALIGN_LEFT);
+    fl_push_clip(32, top, std::max(0, w()-276), 44);
+    fl_draw(status.c_str(), 32, top, std::max(0, w()-276), 44, FL_ALIGN_LEFT);
     fl_pop_clip();
-    draw_child(*transferButton);
+    if (transferButton) draw_child(*transferButton);
+    draw_child(*resolutionChoice);
     fl_pop_clip();
   }
 }
@@ -872,12 +902,12 @@ static double toolbarClock()
 void DesktopWindow::revealToolbar(bool show)
 {
   const double target = show ? 0 : -44;
-  if (!transferButton || toolbarTarget == target)
+  if (!resolutionChoice || toolbarTarget == target)
     return;
   toolbarFrom = toolbarOffset;
   toolbarTarget = target;
   toolbarStarted = toolbarClock();
-  if (show) transferButton->show();
+  if (show) { if (transferButton) transferButton->show(); resolutionChoice->show(); }
   Fl::remove_timeout(animateToolbar, this);
   Fl::add_timeout(0, animateToolbar, this);
 }
@@ -888,20 +918,24 @@ void DesktopWindow::animateToolbar(void *data)
   const double t = std::min(1.0, (toolbarClock() - self->toolbarStarted) / 0.22);
   const double ease = 1 - std::pow(1 - t, 3);
   self->toolbarOffset = self->toolbarFrom + (self->toolbarTarget - self->toolbarFrom) * ease;
-  self->transferButton->position(std::max(4, self->w()-52),
+  if (self->transferButton) self->transferButton->position(std::max(4, self->w()-52),
+    static_cast<int>(std::lround(self->toolbarOffset)) + 5);
+  self->resolutionChoice->position(std::max(4, self->w()-228),
     static_cast<int>(std::lround(self->toolbarOffset)) + 5);
   // Restore the framebuffer beneath the panel; only repaint the top strip.
   self->damage(FL_DAMAGE_CHILD, 0, 0, self->w(), 44);
   if (t < 1)
     Fl::repeat_timeout(1.0/60, animateToolbar, self);
-  else if (self->toolbarTarget == -44)
-    self->transferButton->hide();
+  else if (self->toolbarTarget == -44) {
+    if (self->transferButton) self->transferButton->hide();
+    self->resolutionChoice->hide();
+  }
 }
 
 void DesktopWindow::hideToolbar(void *data)
 {
   DesktopWindow* self = static_cast<DesktopWindow*>(data);
-  if (Fl::pushed() == self->transferButton) {
+  if (Fl::grab() || (self->transferButton && Fl::pushed() == self->transferButton) || Fl::pushed() == self->resolutionChoice) {
     Fl::repeat_timeout(0.1, hideToolbar, self);
     return;
   }
@@ -910,7 +944,7 @@ void DesktopWindow::hideToolbar(void *data)
 
 int DesktopWindow::handle(int event)
 {
-  if (transferButton && (event == FL_ENTER || event == FL_MOVE || event == FL_LEAVE)) {
+  if (resolutionChoice && (event == FL_ENTER || event == FL_MOVE || event == FL_LEAVE)) {
     const bool inside = event != FL_LEAVE && Fl::event_x() >= 0 &&
       Fl::event_x() < w() && Fl::event_y() >= 0;
     const bool edge = inside && Fl::event_y() < 3;
@@ -928,10 +962,10 @@ int DesktopWindow::handle(int event)
   }
   // Only the currently visible overlay intercepts clicks. An in-progress
   // remote drag retains its release even if the pointer crosses the panel.
-  if (transferButton && Fl::pushed() != viewport && Fl::event_y() >= 0 &&
+  if (resolutionChoice && Fl::pushed() != viewport && Fl::event_y() >= 0 &&
       Fl::event_y() < 44 + static_cast<int>(std::lround(toolbarOffset)) &&
       (event == FL_PUSH || event == FL_RELEASE || event == FL_MOVE || event == FL_MOUSEWHEEL)) {
-    if (Fl::event_inside(transferButton))
+    if ((transferButton && Fl::event_inside(transferButton)) || Fl::event_inside(resolutionChoice))
       return Fl_Window::handle(event);
     return 1;
   }
@@ -1547,6 +1581,8 @@ void DesktopWindow::remoteResize(int width, int height)
 
 void DesktopWindow::repositionWidgets()
 {
+  if (resolutionChoice) resolutionChoice->resize(std::max(4, w()-228),
+    static_cast<int>(std::lround(toolbarOffset))+5, 164, 34);
   if (transferButton)
     transferButton->resize(std::max(4, w() - 52),
       static_cast<int>(std::lround(toolbarOffset)) + 5, 40, 34);

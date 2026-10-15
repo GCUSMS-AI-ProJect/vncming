@@ -46,6 +46,7 @@
 #include <FL/fl_ask.H>
 
 #include "CConn.h"
+#include "UserDialog.h"
 #include "OptionsDialog.h"
 #include "DesktopWindow.h"
 #include "PlatformPixelBuffer.h"
@@ -329,6 +330,7 @@ void CConn::socketEvent(FL_SOCKET fd, void *data)
 // server the pixel format and encodings to use and request the first update.
 void CConn::initDone()
 {
+  commitSavedCredentials();
   // If using AutoSelect with old servers, start in FullColor
   // mode. See comment in autoSelectFormatAndEncoding. 
   if (server.beforeVersion(3, 8) && autoSelect)

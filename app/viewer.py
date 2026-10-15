@@ -9,6 +9,7 @@ import subprocess
 import sys
 import uuid
 import struct
+import socket
 import credentials
 
 import gi
@@ -542,7 +543,7 @@ class Viewer(Gtk.Window):
             window = TransferWindow(self, entry)
             self.transfer_windows[key] = window
             window.connect('destroy', lambda *_: self.transfer_windows.pop(key, None))
-            GLib.idle_add(window.login)
+            GLib.idle_add(window.auto_connect)
         except (ValueError, ImportError) as error:
             self.message('无法打开文件传输：' + str(error))
 
@@ -559,6 +560,7 @@ class Viewer(Gtk.Window):
     def start_connection(self, address, entry=None):
         read_fd = write_fd = None
         ready_read = ready_write = None
+        save_reader = save_writer = None
         try:
             address = target_address(address)
             if address in self.pending_connections:
@@ -601,6 +603,10 @@ class Viewer(Gtk.Window):
             os.set_blocking(ready_read, False)
             environment['VNCMING_STATUS_FD'] = str(ready_write)
             inherited += (ready_write,)
+            save_reader, save_writer = socket.socketpair(type=socket.SOCK_DGRAM)
+            save_reader.setblocking(False)
+            environment['VNCMING_SAVE_CREDENTIALS_FD'] = str(save_writer.fileno())
+            inherited += (save_writer.fileno(),)
             process = subprocess.Popen(args, env=environment, pass_fds=inherited,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if write_fd is not None:
@@ -613,13 +619,19 @@ class Viewer(Gtk.Window):
         except (ValueError, OSError, GLib.Error, RuntimeError) as error:
             if ready_read is not None:
                 os.close(ready_read)
+            if save_reader is not None:
+                save_reader.close()
             self.message(str(error))
             return
         finally:
+            if save_writer is not None:
+                save_writer.close()
             for descriptor in (read_fd, write_fd, ready_write):
                 if descriptor is not None:
                     os.close(descriptor)
         self.children[process.pid] = process
+        GLib.timeout_add(100, self.poll_saved_credentials, process, save_reader, address,
+                         entry.get("credential_id") if entry else None)
         dialog = AnimatedDialog(title='正在连接', transient_for=self, modal=False)
         dialog.add_button('取消', Gtk.ResponseType.CANCEL)
         box = Gtk.Box(spacing=14, margin=24)
@@ -635,6 +647,40 @@ class Viewer(Gtk.Window):
         self.update_connect_actions()
         GLib.timeout_add(100, self.poll_pending, address)
         GLib.timeout_add(500, self.poll_child, process, address)
+
+    def poll_saved_credentials(self, process, channel, address, identifier):
+        try:
+            packet = channel.recv(8201)
+        except BlockingIOError:
+            if process.poll() is None:
+                return True
+            channel.close()
+            return False
+        except OSError:
+            channel.close()
+            return False
+        channel.close()
+        if packet == b"\0":
+            return False
+        try:
+            if len(packet) < 8:
+                raise ValueError('凭据数据不完整。')
+            user_length, pass_length = struct.unpack('!II', packet[:8])
+            if user_length > 4096 or not 0 < pass_length <= 4096 or len(packet) != 8 + user_length + pass_length:
+                raise ValueError('凭据数据无效。')
+            username = packet[8:8 + user_length].decode('utf-8')
+            password = packet[8 + user_length:].decode('utf-8')
+            # Resolve by stable ID: rows may have moved while authentication was open.
+            index = next((i for i, e in enumerate(self.entries)
+                          if identifier and e.get('credential_id') == identifier and e['address'] == address), None)
+            if identifier and index is None:
+                return False  # A device deleted during login must stay deleted.
+            old = self.entries[index] if index is not None else None
+            username = username or (old.get('username', '') if old else '')
+            self.save_connection(old['name'] if old else address, address, username, password, index)
+        except (ValueError, UnicodeError, GLib.Error, RuntimeError) as error:
+            self.message('无法保存登录信息：' + str(error))
+        return False
 
     def finish_pending(self, address):
         pending = self.pending_connections.pop(address, None)

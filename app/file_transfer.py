@@ -448,7 +448,30 @@ class TransferWindow(Gtk.Window):
         self.waiters.remove(event)
         return result[0]
 
-    def login(self, *_):
+    def saved_login(self):
+        identity = self.entry.get('credential_id')
+        password = ''
+        if identity:
+            password = credentials.lookup(identity + ':sftp') or credentials.lookup(identity)
+        return (ssh_host(self.entry['address']), int(self.entry.get('ssh_port', 22)),
+                self.entry.get('ssh_username') or self.entry.get('username', ''), password)
+
+    def auto_connect(self):
+        if self.closed or self.connecting:
+            return False
+        try:
+            host, port, user, password = self.saved_login()
+            if not user:
+                self.login(error_message='请填写此设备的 SSH 用户名。')
+            else:
+                self.begin_connect(host, port, user, password, prompt_failure=True)
+        except Exception as exception:
+            self.login(error_message='无法读取登录信息：' + str(exception))
+        return False
+
+    def login(self, *_, error_message=None):
+        if self.closed or self.connecting:
+            return
         if any(task['status'] in ACTIVE_TASKS for task in self.tasks):
             self.state.set_text('请先完成或取消传输任务')
             return
@@ -472,15 +495,15 @@ class TransferWindow(Gtk.Window):
             grid.attach(field, 1, row, 1, 1)
         remember = Gtk.CheckButton(label='将 SSH 密码保存到系统钥匙环')
         grid.attach(remember, 0, 4, 2, 1)
-        note = Gtk.Label(label='远程设备需启用 SSH / SFTP；密码可以与 VNC 密码不同。', wrap=True, max_width_chars=45, xalign=0)
+        note = Gtk.Label(label='默认使用远程登录密码；SSH 密码不同时可在此修改。', wrap=True, max_width_chars=45, xalign=0)
         note.get_style_context().add_class('muted')
         grid.attach(note, 0, 5, 2, 1)
-        error = Gtk.Label(xalign=0, wrap=True, max_width_chars=45)
+        error = Gtk.Label(label=error_message or '', xalign=0, wrap=True, max_width_chars=45)
         grid.attach(error, 0, 6, 2, 1)
         identity = self.entry.get('credential_id')
         try:
             if identity:
-                saved = credentials.lookup(identity + ':sftp')
+                saved = credentials.lookup(identity + ':sftp') or credentials.lookup(identity)
                 fields['password'].set_text(saved)
                 remember.set_active(bool(saved))
         except Exception as exception:
@@ -496,19 +519,16 @@ class TransferWindow(Gtk.Window):
                 if not host or not user or not 1 <= port <= 65535:
                     raise ValueError('请输入主机、用户名和有效端口')
                 password = fields['password'].get_text()
-                if identity:
-                    credentials.store(identity + ':sftp', '文件传输 · ' + self.entry['name'], password if remember.get_active() else '')
-                self.entry.update(ssh_port=port, ssh_username=user)
-                parent = self.get_transient_for()
-                if parent and hasattr(parent, 'save'):
-                    parent.save()
-                self.begin_connect(host, port, user, password)
+                self.begin_connect(host, port, user, password,
+                                   remember=remember.get_active(), prompt_failure=True)
                 break
             except Exception as exception:
                 error.set_text(str(exception))
         dialog.destroy()
 
-    def begin_connect(self, host, port, user, password):
+    def begin_connect(self, host, port, user, password, remember=None, prompt_failure=False):
+        if self.closed or self.connecting:
+            return
         self.connecting = True
         self.state.set_text('正在连接…')
         self.other.set_sensitive(False)
@@ -534,15 +554,36 @@ class TransferWindow(Gtk.Window):
                 def ready():
                     if self.closed:
                         return
+                    self.entry.update(ssh_port=port, ssh_username=user)
+                    parent = self.get_transient_for()
+                    if parent and hasattr(parent, 'save'):
+                        parent.save()
+                    if remember is not None and self.entry.get('credential_id'):
+                        try:
+                            credentials.store(self.entry['credential_id'] + ':sftp',
+                                              '文件传输 · ' + self.entry.get('name', host),
+                                              password if remember else '')
+                        except Exception as exception:
+                            self.ask_save_error(str(exception))
                     self.state.set_text('已连接 · ' + host)
                     self.other.set_sensitive(True)
                     self.other.load(path, canonical=True)
                 GLib.idle_add(ready)
-            except Exception:
+            except Exception as exception:
                 if self.client:
                     self.client.close()
                 self.client = self.remote = self.browse_remote = None
-                raise
+                if prompt_failure and not isinstance(exception, Cancelled):
+                    def failed(message=str(exception)):
+                        if not self.closed:
+                            self.connecting = False
+                            self.update_transfer_actions()
+                            self.state.set_text('连接失败')
+                            self.login(error_message='SSH 连接失败，请检查用户名、密码和端口。\n' + message)
+                        return False
+                    GLib.idle_add(failed)
+                else:
+                    raise
             finally:
                 def finished():
                     if not self.closed:
@@ -550,6 +591,13 @@ class TransferWindow(Gtk.Window):
                         self.update_transfer_actions()
                 GLib.idle_add(finished)
         self.submit(run)
+
+    def ask_save_error(self, message):
+        dialog = AnimatedDialog(title='无法保存 SSH 密码', transient_for=self, modal=True)
+        dialog.get_content_area().add(Gtk.Label(label=message, wrap=True, margin=24))
+        dialog.add_button('关闭', Gtk.ResponseType.CLOSE)
+        dialog.connect('response', lambda *_: dialog.destroy())
+        dialog.show_all()
 
     def enqueue(self, paths, upload):
         destination = self.other.path if upload else self.local.path

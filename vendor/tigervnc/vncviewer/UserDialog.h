@@ -20,6 +20,8 @@
 #define __USERDIALOG_H__
 
 #include <rfb/UserPasswdGetter.h>
+
+void commitSavedCredentials();
 #include <rfb/UserMsgBox.h>
 
 class UserDialog : public rfb::UserPasswdGetter,

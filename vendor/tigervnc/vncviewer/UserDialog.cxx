@@ -57,6 +57,23 @@ using namespace rfb;
 static Fl_Pixmap secure_icon(secure);
 static Fl_Pixmap insecure_icon(insecure);
 
+class RememberCredentialsButton : public ModernCheckButton {
+public:
+  RememberCredentialsButton(int x, int y, int w, int h, const char* label)
+    : ModernCheckButton(x,y,w,h,label) {}
+  void draw() {
+    fl_color(fl_rgb_color(250,249,247)); fl_rectf(x(),y(),w(),h());
+    int top=y()+(h()-18)/2;
+    macRoundBox(x(),top,18,18,value()?fl_rgb_color(245,128,37):fl_rgb_color(221,216,210));
+    if (value()) {
+      fl_color(FL_WHITE); fl_line_style(FL_SOLID,2);
+      fl_line(x()+4,top+9,x()+8,top+13,x()+14,top+5); fl_line_style(0);
+    } else macRoundBox(x()+1,top+1,16,16,FL_WHITE);
+    fl_color(labelcolor()); fl_font(labelfont(),labelsize());
+    fl_draw(label(),x()+26,y(),w()-26,h(),FL_ALIGN_LEFT);
+  }
+};
+
 static int ret_val = 0;
 
 static void button_cb(Fl_Widget *widget, void *val) {
@@ -73,9 +90,40 @@ UserDialog::~UserDialog()
 }
 
 #include <unistd.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <string>
+
+static std::string pendingUsername, pendingPassword;
+void commitSavedCredentials()
+{
+  const char* descriptor = getenv("VNCMING_SAVE_CREDENTIALS_FD");
+  if (!descriptor) {
+    std::fill(pendingPassword.begin(), pendingPassword.end(), '\0');
+    pendingPassword.clear(); pendingUsername.clear();
+    return;
+  }
+  int fd = atoi(descriptor);
+  unsetenv("VNCMING_SAVE_CREDENTIALS_FD");
+  if (fd >= 3 && !pendingPassword.empty()) {
+    uint32_t lengths[] = {htonl(pendingUsername.size()), htonl(pendingPassword.size())};
+    std::string packet(reinterpret_cast<char*>(lengths), sizeof(lengths));
+    packet += pendingUsername; packet += pendingPassword;
+    // A private datagram is atomic and cannot raise SIGPIPE if the launcher exits.
+    ssize_t sent;
+    do { sent=send(fd, packet.data(), packet.size(), MSG_NOSIGNAL); }
+    while (sent < 0 && errno == EINTR);
+    std::fill(packet.begin(), packet.end(), '\0');
+  }
+  if (fd >= 3 && pendingPassword.empty()) {
+    const char done = 0;
+    send(fd, &done, 1, MSG_NOSIGNAL);
+  }
+  if (fd >= 3) close(fd);
+  std::fill(pendingPassword.begin(), pendingPassword.end(), '\0');
+  pendingPassword.clear(); pendingUsername.clear();
+}
 
 static bool readCredentialBytes(int fd, void *buffer, size_t count)
 {
@@ -91,6 +139,8 @@ static bool readCredentialBytes(int fd, void *buffer, size_t count)
 
 void UserDialog::getUserPasswd(bool secure, char** user, char** password)
 {
+  std::fill(pendingPassword.begin(), pendingPassword.end(), '\0');
+  pendingPassword.clear(); pendingUsername.clear();
   CharArray passwordFileStr(passwordFile.getData());
 
   assert(password);
@@ -187,7 +237,11 @@ void UserDialog::getUserPasswd(bool secure, char** user, char** password)
   passwd = new ModernSecretInput(114, y, win->w()-138, 34);
   passwd->box(modernInputBox());
   passwd->color(FL_WHITE);
-  y += 58;
+  y += 46;
+  RememberCredentialsButton* remember = new RememberCredentialsButton(114, y, 322, 28, "保存用户名和密码");
+  remember->value(1);
+  remember->tooltip("连接成功后保存到系统钥匙环");
+  y += 46;
 
   button = new MacReturnButton(326, y, 110, 34, "连接");
   button->box(macBox());
@@ -217,6 +271,11 @@ void UserDialog::getUserPasswd(bool secure, char** user, char** password)
     if (user)
       *user = strDup(username->value());
     *password = strDup(passwd->value());
+    if (remember->value() && strlen(passwd->value()) <= 4096 &&
+        (!username || strlen(username->value()) <= 4096)) {
+      pendingUsername = username ? username->value() : "";
+      pendingPassword = passwd->value();
+    }
   }
 
   delete win;
