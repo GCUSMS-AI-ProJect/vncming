@@ -1,6 +1,7 @@
 'use strict';
 
 const Shell = imports.gi.Shell;
+const St = imports.gi.St;
 const AppDisplay = imports.ui.appDisplay;
 const Main = imports.ui.main;
 const APP_ID = 'vncming.desktop';
@@ -47,6 +48,9 @@ class Extension {
     }
 
     _refresh() {
+        // Existing app-grid and favorite actors keep their icon textures when
+        // only desktop-file metadata changes. Reload textures without restarting Shell.
+        St.TextureCache.get_default().emit('icon-theme-changed');
         const display = Main.overview._overview.controls._appDisplay;
         if (display)
             display._redisplay();

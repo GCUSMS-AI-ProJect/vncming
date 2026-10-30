@@ -1,0 +1,8 @@
+Use case: logo-brand
+Asset type: original Linux desktop application icon for VNCMing, 1024x1024 PNG.
+Primary request: create a fresh independent identity, visually unrelated to the existing VNC or TigerVNC logos. The app provides remote connections and file transfers.
+Subject: a single compact abstract portal or interlocking connection mark, with a distinctive balanced silhouette and generous negative space. No lettering, no acronym, no eye, no tiger, no familiar VNC geometry.
+Style: polished contemporary desktop app icon, simple sculptural forms, restrained soft depth, crisp readable edges, recognizable at 32 pixels. One icon only, centered front view, no presentation board, no mockup, no frame of multiple concepts.
+Color: harmonize with the application's warm orange interface; warm orange and cream with a restrained deep warm accent.
+Backdrop: a clean uniform off-white background for a square app tile; no checkerboard, no text, no watermark.
+Composition: centered mark with consistent comfortable margins. Fill the square with the background and keep all important geometry inside the central 78 percent.

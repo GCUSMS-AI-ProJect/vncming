@@ -2,6 +2,7 @@
 #define VNCMING_STYLED_MESSAGE_H
 
 #include "MacMotion.h"
+#include "i18n.h"
 #include <FL/Fl_Box.H>
 #include <FL/fl_ask.H>
 #include <cstdarg>
@@ -62,7 +63,7 @@ inline int vncShowMessage(const std::string& text, bool warning,
                           const char* b0, const char* b1, const char* b2) {
   std::string title = vncMessageTitleStorage();
   vncMessageTitleStorage().clear();
-  if (title.empty()) title = warning ? "连接错误 — VNCMing" : "VNCMing";
+  if (title.empty()) title = warning ? p_("VNCMing", "Connection Error — VNCMing") : "VNCMing";
   const int width = 640;
   int textWidth = width - 48, textHeight = 0;
   fl_font(FL_HELVETICA, 14);
@@ -105,8 +106,8 @@ inline int vncShowMessage(const std::string& text, bool warning,
     Fl_Button* button = primary
       ? static_cast<Fl_Button*>(new MacReturnButton(x, bodyHeight + 110, buttonWidths[i], 38, labels[i]))
       : static_cast<Fl_Button*>(new MacButton(x, bodyHeight + 110, buttonWidths[i], 38, labels[i]));
-    button->color(primary ? fl_rgb_color(245, 128, 37) : FL_WHITE);
-    button->labelcolor(primary ? FL_WHITE : fl_rgb_color(81, 74, 67));
+    button->color(fl_rgb_color(255, 253, 248));
+    button->labelcolor(fl_rgb_color(68, 58, 51));
     button->labelsize(14);
     button->callback(vncMessageButton, &actions[i]);
     x += buttonWidths[i] + 10;
@@ -124,12 +125,12 @@ inline int vncShowMessage(const std::string& text, bool warning,
 inline void vncAlert(const char* format, ...) {
   va_list args; va_start(args, format);
   std::string text = vncFormatMessage(format, args); va_end(args);
-  vncShowMessage(text, true, "确定", NULL, NULL);
+  vncShowMessage(text, true, p_("VNCMing", "OK"), NULL, NULL);
 }
 inline void vncMessage(const char* format, ...) {
   va_list args; va_start(args, format);
   std::string text = vncFormatMessage(format, args); va_end(args);
-  vncShowMessage(text, false, "确定", NULL, NULL);
+  vncShowMessage(text, false, p_("VNCMing", "OK"), NULL, NULL);
 }
 inline int vncChoice(const char* format, const char* b0, const char* b1,
                      const char* b2, ...) {

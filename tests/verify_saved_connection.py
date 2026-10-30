@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     window = viewer.Viewer()
     assert window.options['FullScreen'] is False and window.options['Maximize'] is True
     result['legacy_fullscreen_migrated_to_maximized'] = True
+    assert window.auto_continue_hostname_mismatch is False
     window.entries = [{'name': 'UI Test', 'address': '127.0.0.1'}]
     window.refresh()
     original_dialog = window.connection_dialog
@@ -96,7 +97,11 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
     messages = []
     window.message = messages.append
     try:
+        window.address.set_text('127.0.0.1::5999')
+        connect_width = window.connect_button.get_preferred_width()[1]
         window.start_connection('127.0.0.1::5999')
+        assert window.connect_button.get_label() == '连接'
+        assert window.connect_button.get_preferred_width()[1] == connect_width
         pending = window.pending_connections['127.0.0.1::5999']
         window.address.set_text('127.0.0.1::5999')
         assert not window.connect_button.get_sensitive()
@@ -276,7 +281,12 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         window.options['Shared'] = True
         saved['address'] = '127.0.0.1::' + str(server.getsockname()[1])
         original_popen = viewer.subprocess.Popen
+        window.auto_continue_hostname_mismatch = True
+        saved['allow_hostname_mismatch'] = False
+        window.save()
+        assert json.loads(viewer.DATA.read_text())['auto_continue_hostname_mismatch'] is True
         def fixture_engine(args, **kwargs):
+            assert kwargs['env'].get('VNCMING_APPROVED_HOSTNAME') == '127.0.0.1'
             # The local fixture advertises unencrypted Plain auth only.
             return original_popen(args[:-1] + ['-SecurityTypes=Plain'] + args[-1:], **kwargs)
         viewer.subprocess.Popen = fixture_engine
@@ -287,6 +297,7 @@ with tempfile.TemporaryDirectory(prefix='vncming-check-') as temporary:
         assert window.poll_pending(saved['address']) is False
         assert saved['address'] not in window.pending_connections
         result['connection_progress_completed'] = True
+        result['global_hostname_auto_continue_overrides_connection_setting'] = True
         for process in window.children.values():
             process.terminate()
             process.wait(5)

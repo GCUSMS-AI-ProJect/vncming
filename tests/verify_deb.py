@@ -18,6 +18,8 @@ with tempfile.TemporaryDirectory(prefix='vncming-deb-check-') as directory:
     stage = Path(directory)
     subprocess.run(['dpkg-deb', '-R', str(package), str(stage)], check=True)
     program = stage / 'usr/lib/vncming'
+    assert (program / 'app/i18n.py').is_file()
+    assert (program / 'build/locale/zh_CN/LC_MESSAGES/tigervnc.mo').is_file()
     for line in (stage / 'DEBIAN/md5sums').read_text().splitlines():
         digest, name = line.split('  ', 1)
         assert hashlib.md5((stage / name).read_bytes()).hexdigest() == digest, name

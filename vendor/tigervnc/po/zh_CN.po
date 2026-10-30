@@ -703,3 +703,173 @@ msgstr "正在监听端口 %d"
 
 #~ msgid "Could not create framebuffer image"
 #~ msgstr "无法创建帧缓冲图像"
+
+# VNCMing interface additions
+
+msgctxt "VNCMing"
+msgid "Disconnect"
+msgstr "断开连接"
+
+msgctxt "VNCMing"
+msgid "Full Screen"
+msgstr "全屏"
+
+msgctxt "VNCMing"
+msgid "Minimize"
+msgstr "最小化"
+
+msgctxt "VNCMing"
+msgid "Resize Window to Fit Desktop"
+msgstr "窗口适配远程桌面"
+
+msgctxt "VNCMing"
+msgid "Send Ctrl-Alt-Del"
+msgstr "发送 Ctrl-Alt-Del"
+
+msgctxt "VNCMing"
+msgid "Refresh Screen"
+msgstr "刷新画面"
+
+msgctxt "VNCMing"
+msgid "Connection Options…"
+msgstr "连接选项…"
+
+msgctxt "VNCMing"
+msgid "File Transfer…"
+msgstr "文件传输…"
+
+msgctxt "VNCMing"
+msgid "Connection Information…"
+msgstr "连接信息…"
+
+msgctxt "VNCMing"
+msgid "About VNCMing…"
+msgstr "关于 VNCMing…"
+
+msgctxt "VNCMing"
+msgid "Authentication — VNCMing"
+msgstr "身份验证 — VNCMing"
+
+msgctxt "VNCMing"
+msgid "Connect to Remote Desktop"
+msgstr "连接到远程桌面"
+
+msgctxt "VNCMing"
+msgid "This connection is encrypted"
+msgstr "此连接已加密"
+
+msgctxt "VNCMing"
+msgid "This connection is not encrypted"
+msgstr "此连接未加密"
+
+msgctxt "VNCMing"
+msgid "Username"
+msgstr "用户名"
+
+msgctxt "VNCMing"
+msgid "Password"
+msgstr "密码"
+
+msgctxt "VNCMing"
+msgid "Save username and password"
+msgstr "保存用户名和密码"
+
+msgctxt "VNCMing"
+msgid "Save to the system keyring after connecting"
+msgstr "连接成功后保存到系统钥匙环"
+
+msgctxt "VNCMing"
+msgid "Connect"
+msgstr "连接"
+
+msgctxt "VNCMing"
+msgid "Cancel"
+msgstr "取消"
+
+msgctxt "VNCMing"
+msgid "Connection Error — VNCMing"
+msgstr "连接错误 — VNCMing"
+
+msgctxt "VNCMing"
+msgid "OK"
+msgstr "确定"
+
+msgctxt "VNCMing"
+msgid "File Transfer"
+msgstr "文件传输"
+
+msgctxt "VNCMing"
+msgid "Keep current resolution|Resize with window|1280×720|1600×900|1920×1080|2560×1440|3840×2160"
+msgstr "保持当前分辨率|随窗口调整|1280×720|1600×900|1920×1080|2560×1440|3840×2160"
+
+msgctxt "VNCMing"
+msgid "Remote resolution (requires server support)"
+msgstr "远程分辨率（需要服务器支持）"
+
+msgctxt "VNCMing"
+msgid "This server does not support changing the remote resolution yet. The current resolution is unchanged."
+msgstr "此服务器尚未支持修改远程分辨率。当前画面分辨率保持不变。"
+
+msgctxt "VNCMing"
+msgid "Connected"
+msgstr "已连接"
+
+msgctxt "VNCMing"
+msgid "New Connection — VNCMing"
+msgstr "新建连接 — VNCMing"
+
+msgctxt "VNCMing"
+msgid "IP Address"
+msgstr "IP地址"
+
+msgctxt "VNCMing"
+msgid "Open VNCMing Configuration"
+msgstr "打开 VNCMing 配置"
+
+msgctxt "VNCMing"
+msgid "VNC Configuration\t*.tigervnc"
+msgstr "VNC 配置\t*.tigervnc"
+
+msgctxt "VNCMing"
+msgid "Save VNCMing Configuration"
+msgstr "保存 VNCMing 配置"
+
+msgctxt "VNCMing"
+msgid "Connection Options — VNCMing"
+msgstr "连接选项 — VNCMing"
+
+msgctxt "VNCMing"
+msgid "About VNCMing"
+msgstr "关于 VNCMing"
+
+msgctxt "VNCMing"
+msgid "Reconnect"
+msgstr "重新连接"
+
+msgctxt "VNCMing"
+msgid "Close"
+msgstr "关闭"
+
+msgctxt "VNCMing"
+msgid "Unable to connect to \"%s\":\n\n%s"
+msgstr "无法连接到 \"%s\"：\n\n%s"
+
+msgctxt "VNCMing"
+msgid "Requested resolution: %.32s"
+msgstr "请求分辨率：%.32s"
+
+msgctxt "VNCMing"
+msgid "Server-side resizing: %s"
+msgstr "服务器调整分辨率：%s"
+
+msgctxt "VNCMing"
+msgid "Supported"
+msgstr "支持"
+
+msgctxt "VNCMing"
+msgid "Not supported; configure on the remote device"
+msgstr "不支持，需在远程设备设置"
+
+msgctxt "VNCMing"
+msgid "%s\n\nReconnect?"
+msgstr "%s\n\n是否重新连接？"

@@ -1,4 +1,6 @@
 """Ubuntu-style two-pane SFTP browser and asynchronous transfer queue."""
+from i18n import tr
+import i18n
 import os
 from functools import lru_cache
 import queue
@@ -28,7 +30,7 @@ def icon(name, size=20):
 
 
 def button(label, symbol, callback):
-    widget = Gtk.Button(label=label)
+    widget = i18n.create(Gtk.Button, label=label)
     widget.set_image(icon(symbol, 18))
     widget.set_always_show_image(True)
     widget.connect('clicked', callback)
@@ -37,13 +39,13 @@ def button(label, symbol, callback):
 def action_menu(items):
     widget = Gtk.MenuButton()
     widget.set_image(icon('more', 18))
-    widget.set_tooltip_text('更多操作')
+    i18n.set_text(widget, 'set_tooltip_text', tr('更多操作'))
     widget.get_style_context().add_class('path-action')
     popover = Gtk.Popover()
     box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin=6)
     actions = {}
     for caption, callback in items:
-        item = Gtk.ModelButton(text=caption)
+        item = i18n.create(Gtk.ModelButton, text=tr(caption))
         def activate(_, action=callback):
             popover.popdown()
             action()
@@ -79,31 +81,34 @@ class Browser(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.owner, self.remote, self.path, self.generation = owner, remote, None, 0
         self.loading = False
+        self.forward_paths = []
         self.operations = queue.Queue()
         self.worker_thread = threading.Thread(target=self.worker, name="vncming-browse-" + str(remote))
         self.worker_thread.start()
         heading = Gtk.Box(spacing=8)
         heading.pack_start(icon('server' if remote else 'monitor'), False, False, 0)
-        name = Gtk.Label(label=owner.entry.get('name', '') if remote else '本机', xalign=0, ellipsize=3)
+        name = i18n.create(Gtk.Label, label=owner.entry.get('name', '') if remote else tr('本机'), xalign=0, ellipsize=3)
         name.get_style_context().add_class('group-title')
         heading.pack_start(name, True, True, 0)
-        tag = Gtk.Label(label=ssh_host(owner.entry['address']) if remote else '')
+        tag = i18n.create(Gtk.Label, label=ssh_host(owner.entry['address']) if remote else '')
         tag.get_style_context().add_class('muted')
         heading.pack_end(tag, False, False, 0)
-        self.transfer_button = button('下载' if remote else '上传', 'download' if remote else 'upload',
+        self.transfer_button = button(tr('下载') if remote else tr('上传'), 'download' if remote else 'upload',
                                       lambda *_: owner.enqueue(self.selected(), not remote))
         self.transfer_button.set_sensitive(False)
         heading.pack_end(self.transfer_button, False, False, 0)
         self.pack_start(heading, False, False, 0)
         tools = Gtk.Box(spacing=6)
-        self.location = Gtk.Entry()
+        self.location = i18n.create(Gtk.Entry)
         self.location.set_hexpand(True)
         self.location.connect('activate', lambda field: self.load(field.get_text()))
         tools.pack_start(self.location, True, True, 0)
         self.path_buttons = []
-        for label, symbol, callback in [('上级目录', 'arrow-up', self.parent), ('刷新', 'refresh-cw', self.refresh)]:
+        for label, symbol, callback in [(tr('上级目录'), 'arrow-up', self.parent),
+                                        (tr('下级目录（返回刚才的目录）'), 'arrow-down', self.forward),
+                                        (tr('刷新'), 'refresh-cw', self.refresh)]:
             b = button('', symbol, callback)
-            b.set_tooltip_text(label)
+            i18n.set_text(b, 'set_tooltip_text', label)
             b.get_style_context().add_class('path-action')
             tools.pack_start(b, False, False, 0)
             self.path_buttons.append(b)
@@ -114,7 +119,7 @@ class Browser(Gtk.Box):
         self.view = Gtk.TreeView(model=self.model)
         self.view.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
         self.view.get_selection().connect('changed', lambda *_: owner.update_transfer_actions())
-        column = Gtk.TreeViewColumn('名称')
+        column = i18n.create(Gtk.TreeViewColumn, tr('名称'))
         image = Gtk.CellRendererPixbuf()
         text = Gtk.CellRendererText(ellipsize=3)
         column.pack_start(image, False)
@@ -124,15 +129,15 @@ class Browser(Gtk.Box):
         column.set_expand(True)
         column.set_min_width(130)
         self.view.append_column(column)
-        for title, index in [('大小', 2), ('修改时间', 3)]:
-            self.view.append_column(Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=index))
+        for title, index in [(tr('大小'), 2), (tr('修改时间'), 3)]:
+            self.view.append_column(i18n.create(Gtk.TreeViewColumn, title, Gtk.CellRendererText(), text=index))
         self.connect('size-allocate', lambda _, area: self.view.get_column(2).set_visible(area.width >= 440))
         self.view.connect('row-activated', self.open_row)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll.add(self.view)
         self.pack_start(scroll, True, True, 0)
-        self.note = Gtk.Label(xalign=0, ellipsize=3)
+        self.note = i18n.create(Gtk.Label, xalign=0, ellipsize=3)
         self.note.get_style_context().add_class('muted')
         self.pack_start(self.note, False, False, 0)
         if remote:
@@ -143,10 +148,12 @@ class Browser(Gtk.Box):
         self.update_path_actions()
 
     def update_path_actions(self):
-        files = self.owner.remote if self.remote else LocalFiles()
-        self.path_buttons[0].set_sensitive(bool(self.path and files and files.parent(self.path) != self.path))
-        self.path_buttons[1].set_sensitive(bool(self.path))
-        self.menu_actions['新建文件夹…'].set_sensitive(bool(self.path))
+        files = self.files()
+        ready = bool(self.path and files and not self.loading)
+        self.path_buttons[0].set_sensitive(bool(ready and files.parent(self.path) != self.path))
+        self.path_buttons[1].set_sensitive(bool(ready and self.forward_paths))
+        self.path_buttons[2].set_sensitive(ready)
+        self.menu_actions['新建文件夹…'].set_sensitive(ready)
 
     def worker(self):
         while True:
@@ -159,7 +166,7 @@ class Browser(Gtk.Box):
     def files(self):
         return self.owner.browse_remote if self.remote else LocalFiles()
 
-    def load(self, path, canonical=False):
+    def load(self, path, canonical=False, navigation=None):
         if self.owner.closed:
             return
         self.generation += 1
@@ -167,8 +174,8 @@ class Browser(Gtk.Box):
         files = self.files()
         self.loading = True
         self.view.set_sensitive(False)
-        self.note.set_text('正在读取…')
-        self.menu_actions['新建文件夹…'].set_sensitive(False)
+        i18n.set_text(self.note, 'set_text', tr('正在读取…'))
+        self.update_path_actions()
         self.owner.update_transfer_actions()
         def current():
             return not self.owner.closed and generation == self.generation
@@ -176,7 +183,7 @@ class Browser(Gtk.Box):
             if current():
                 self.loading = False
                 self.view.set_sensitive(True)
-                self.note.set_text('操作失败：' + message)
+                i18n.set_text(self.note, 'set_text', tr('操作失败：') + message)
                 self.update_path_actions()
                 self.owner.update_transfer_actions()
         def read():
@@ -189,7 +196,7 @@ class Browser(Gtk.Box):
                 for name, info in items:
                     safe_name(name)
                     directory = stat.S_ISDIR(info.st_mode)
-                    rows.append((name, directory, '文件夹' if directory else human_size(info.st_size),
+                    rows.append((name, directory, tr('文件夹') if directory else human_size(info.st_size),
                         time.strftime('%Y-%m-%d %H:%M', time.localtime(info.st_mtime)), files.join(normalized, name)))
             except Exception as error:
                 GLib.idle_add(failed, str(error))
@@ -207,16 +214,25 @@ class Browser(Gtk.Box):
                         if row is None:
                             self.model = model
                             self.view.set_model(model)
+                            if normalized != self.path:
+                                if navigation == 'parent' and self.path:
+                                    self.forward_paths.append(self.path)
+                                elif navigation == 'forward':
+                                    if self.forward_paths and self.forward_paths[-1] == normalized:
+                                        self.forward_paths.pop()
+                                else:
+                                    self.forward_paths.clear()
                             self.path = normalized
-                            self.location.set_text(normalized)
+                            i18n.set_text(self.location, 'set_text', normalized)
                             self.loading = False
                             self.view.set_sensitive(True)
-                            self.note.set_text(f'{len(items)} 个项目 · 双击文件夹进入')
+                            i18n.set_text(self.note, 'set_text', tr('{count} 个项目 · 双击文件夹进入').format(count=len(items)))
                             self.update_path_actions()
                             self.owner.update_transfer_actions()
                             return False
                         name, directory, size, modified, fullpath = row
-                        model.append([icon_pixbuf('folder' if directory else 'file'), name, size, modified, fullpath, directory])
+                        model.append([icon_pixbuf('folder' if directory else 'file'), name,
+                                      tr('文件夹') if directory else size, modified, fullpath, directory])
                     return True
                 GLib.idle_add(append_batch)
                 return False
@@ -228,9 +244,15 @@ class Browser(Gtk.Box):
             self.load(self.path, canonical=True)
 
     def parent(self, *_):
-        if self.path:
-            files = self.owner.remote if self.remote else LocalFiles()
-            self.load(files.parent(self.path) or '/', canonical=True)
+        if self.path and not self.loading:
+            files = self.files()
+            target = files.parent(self.path) or '/'
+            if target != self.path:
+                self.load(target, canonical=True, navigation='parent')
+
+    def forward(self, *_):
+        if self.forward_paths and not self.loading:
+            self.load(self.forward_paths[-1], canonical=True, navigation='forward')
 
     def open_row(self, _, path, column):
         if self.model[path][5]:
@@ -243,11 +265,11 @@ class Browser(Gtk.Box):
     def new_folder(self, *_):
         if not self.path or self.loading:
             return
-        dialog = AnimatedDialog(title='新建文件夹', transient_for=self.owner, modal=True)
-        field = Gtk.Entry(margin=20)
-        field.set_placeholder_text('文件夹名称')
+        dialog = i18n.create(AnimatedDialog, title=tr('新建文件夹'), transient_for=self.owner, modal=True)
+        field = i18n.create(Gtk.Entry, margin=20)
+        i18n.set_text(field, 'set_placeholder_text', tr('文件夹名称'))
         dialog.get_content_area().add(field)
-        dialog.add_buttons('取消', Gtk.ResponseType.CANCEL, '创建', Gtk.ResponseType.OK)
+        i18n.add_buttons(dialog, 'add_buttons', tr('取消'), Gtk.ResponseType.CANCEL, tr('创建'), Gtk.ResponseType.OK)
         dialog.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
         dialog.show_all()
         if dialog.run() == Gtk.ResponseType.OK:
@@ -263,11 +285,11 @@ class Browser(Gtk.Box):
                     except Exception as error:
                         def failed(message=str(error)):
                             if not self.owner.closed and generation == self.generation:
-                                self.note.set_text('操作失败：' + message)
+                                i18n.set_text(self.note, 'set_text', tr('操作失败：') + message)
                         GLib.idle_add(failed)
                 self.operations.put(create)
             except ValueError as error:
-                self.note.set_text(str(error))
+                i18n.set_text(self.note, 'set_text', str(error))
         dialog.destroy()
 
     def drop_files(self, widget, context, x, y, selection, info, timestamp):
@@ -276,7 +298,7 @@ class Browser(Gtk.Box):
             try:
                 path, host = GLib.filename_from_uri(uri)
                 if host not in (None, '', 'localhost'):
-                    raise ValueError('仅支持本机文件')
+                    raise ValueError(tr('仅支持本机文件'))
                 paths.append(path)
             except (GLib.Error, ValueError):
                 Gtk.drag_finish(context, False, False, timestamp)
@@ -289,11 +311,12 @@ class Browser(Gtk.Box):
 
 class TransferWindow(Gtk.Window):
     def __init__(self, parent, entry):
-        super().__init__(title='文件传输 · ' + entry.get('name', entry['address']))
+        super().__init__()
+        i18n.set_text(self, 'set_title', tr('文件传输 · ') + entry.get('name', entry['address']))
         self.entry = entry
         self.set_transient_for(parent)
         self.set_default_size(1080, 740)
-        self.set_icon_from_file(str(ROOT / 'assets/vncming-orange.png'))
+        self.set_icon_from_file(str(ROOT / 'assets/vncming-portal.png'))
         self.get_style_context().add_class('transfer-window')
         self.closed = False
         self.connecting = False
@@ -303,14 +326,21 @@ class TransferWindow(Gtk.Window):
         self.waiters = []
         self.connect('delete-event', self.close_requested)
         self.connect('destroy', self.shutdown)
-        header = Gtk.HeaderBar(title='文件传输', show_close_button=True)
-        self.state = Gtk.Label(label='尚未连接')
+        header = i18n.create(Gtk.HeaderBar, title=tr('文件传输 · ') + entry.get('name', entry['address']), show_close_button=True)
+        self.state = i18n.create(Gtk.Label, label=tr('尚未连接'))
         self.state.get_style_context().add_class('muted')
         header.pack_start(self.state)
-        self.login_button = button('连接', 'server', self.login)
+        self.login_button = button(tr('连接'), 'server', self.login)
+        self.login_button.set_size_request(96, 40)
         self.login_button.set_no_show_all(True)
         header.pack_end(self.login_button)
         self.connection_more, self.connection_actions = action_menu([('重新连接…', self.login)])
+        self.connection_more.get_style_context().remove_class('path-action')
+        i18n.set_text(self.connection_more, 'set_label', tr('连接'))
+        self.connection_more.set_image(icon('server', 18))
+        self.connection_more.set_always_show_image(True)
+        i18n.set_text(self.connection_more, 'set_tooltip_text', tr('连接设置'))
+        self.connection_more.set_size_request(96, 40)
         self.connection_more.set_no_show_all(True)
         header.pack_end(self.connection_more)
         self.set_titlebar(header)
@@ -325,7 +355,7 @@ class TransferWindow(Gtk.Window):
         split.set_position(510)
         main.pack_start(split, True, True, 0)
         heading = Gtk.Box(spacing=8)
-        self.task_title = Gtk.Label(label='传输任务', xalign=0)
+        self.task_title = i18n.create(Gtk.Label, label=tr('传输任务'), xalign=0)
         self.task_title.get_style_context().add_class('group-title')
         heading.pack_start(self.task_title, True, True, 0)
         more, self.task_actions = action_menu([('重试失败任务', self.retry), ('取消全部传输', self.cancel_all), ('清除已结束任务', self.clear_finished)])
@@ -335,20 +365,20 @@ class TransferWindow(Gtk.Window):
         self.task_view = Gtk.TreeView(model=self.task_model)
         self.task_view.set_tooltip_column(5)
         self.task_view.connect('key-press-event', self.task_key_press)
-        for title, index in [('名称', 0), ('方向', 1), ('状态', 2)]:
+        for title, index in [(tr('名称'), 0), (tr('方向'), 1), (tr('状态'), 2)]:
             cell = Gtk.CellRendererText(ellipsize=3)
-            column = Gtk.TreeViewColumn(title, cell, text=index)
+            column = i18n.create(Gtk.TreeViewColumn, title, cell, text=index)
             column.set_expand(index == 0)
             column.set_min_width(150 if index == 0 else 80)
             self.task_view.append_column(column)
-        progress_column = Gtk.TreeViewColumn('进度', Gtk.CellRendererProgress(), value=3)
+        progress_column = i18n.create(Gtk.TreeViewColumn, tr('进度'), Gtk.CellRendererProgress(), value=3)
         progress_column.set_min_width(90)
         self.task_view.append_column(progress_column)
-        speed_column = Gtk.TreeViewColumn('大小 / 速度', Gtk.CellRendererText(ellipsize=3), text=4)
+        speed_column = i18n.create(Gtk.TreeViewColumn, tr('大小 / 速度'), Gtk.CellRendererText(ellipsize=3), text=4)
         speed_column.set_min_width(150)
         self.task_view.append_column(speed_column)
         self.task_action_renderer = TaskActionRenderer(self)
-        self.task_action_column = Gtk.TreeViewColumn('', self.task_action_renderer, text=7)
+        self.task_action_column = i18n.create(Gtk.TreeViewColumn, '', self.task_action_renderer, text=7)
         self.task_action_column.set_min_width(72)
         self.task_view.append_column(self.task_action_column)
         self.task_stack = Gtk.Stack()
@@ -357,7 +387,7 @@ class TransferWindow(Gtk.Window):
         scroll.set_size_request(-1, 170)
         scroll.add(self.task_view)
         self.task_stack.add_named(scroll, 'tasks')
-        empty = Gtk.Label(label='暂无传输任务', xalign=0, margin_top=4, margin_bottom=8)
+        empty = i18n.create(Gtk.Label, label=tr('暂无传输任务'), xalign=0, margin_top=4, margin_bottom=8)
         empty.get_style_context().add_class('muted')
         self.task_stack.add_named(empty, 'empty')
         main.pack_start(self.task_stack, False, False, 0)
@@ -368,6 +398,23 @@ class TransferWindow(Gtk.Window):
         self.update_transfer_actions()
         self.update_task_actions()
         self.local.load(str(Path.home()))
+
+    def retranslate(self):
+        if self.closed:
+            return
+        # Models store plain strings; update presentation columns from stable state.
+        for pane in (self.local, self.other):
+            for row in pane.model:
+                if row[5]:
+                    row[2] = tr('文件夹')
+        for row in self.task_model:
+            task = row[6]
+            row[1] = tr('上传') if task['upload'] else tr('下载')
+            status = '正在取消' if task['cancel'].is_set() and task['status'] in ACTIVE_TASKS else task['status']
+            row[2] = (tr('已完成 · 跳过 {count} 项').format(count=task['skipped'])
+                      if status == '已完成' and task.get('skipped') else tr(status))
+            row[7] = (tr('取消') if status in ACTIVE_TASKS and status != '正在取消'
+                      else tr('重试') if status in ('失败', '已取消') else '')
 
     def worker(self):
         while True:
@@ -382,8 +429,8 @@ class TransferWindow(Gtk.Window):
             except Exception as error:
                 def show(message=str(error), widget=target):
                     if not self.closed:
-                        widget.set_text('操作失败：' + message)
-                        widget.set_tooltip_text(message)
+                        i18n.set_text(widget, 'set_text', tr('操作失败：') + message)
+                        i18n.set_text(widget, 'set_tooltip_text', message)
                 GLib.idle_add(show)
         if self.client:
             self.client.close()
@@ -400,7 +447,7 @@ class TransferWindow(Gtk.Window):
         connected = self.remote is not None and not self.connecting
         self.upload.set_sensitive(bool(connected and self.other.path and not self.other.loading and not self.local.loading and self.local.selected()))
         self.download.set_sensitive(bool(connected and self.local.path and not self.local.loading and not self.other.loading and self.other.selected()))
-        self.login_button.set_label('正在连接…' if self.connecting else '连接')
+        i18n.set_text(self.login_button, 'set_tooltip_text', tr('正在连接，请稍候') if self.connecting else tr('连接文件传输'))
         self.login_button.set_visible(not connected)
         self.login_button.set_sensitive(not self.connecting)
         self.connection_more.set_visible(connected)
@@ -415,7 +462,7 @@ class TransferWindow(Gtk.Window):
         self.task_actions['重试失败任务'].set_sensitive(failed)
         self.task_actions['取消全部传输'].set_sensitive(active)
         self.task_actions['清除已结束任务'].set_sensitive(finished)
-        self.task_title.set_text('传输任务' + (f' · {len(self.tasks)}' if self.tasks else ''))
+        i18n.set_text(self.task_title, 'set_text', tr('传输任务') + (f' · {len(self.tasks)}' if self.tasks else ''))
         self.task_stack.set_visible_child_name('tasks' if self.tasks else 'empty')
         self.update_transfer_actions()
 
@@ -429,11 +476,11 @@ class TransferWindow(Gtk.Window):
             if self.closed:
                 event.set()
                 return
-            dialog = AnimatedDialog(title=title, transient_for=self, modal=True)
-            label = Gtk.Label(label=text, wrap=True, selectable=True, max_width_chars=60, margin=24)
+            dialog = i18n.create(AnimatedDialog, title=title, transient_for=self, modal=True)
+            label = i18n.create(Gtk.Label, label=text, wrap=True, selectable=True, max_width_chars=60, margin=24)
             dialog.get_content_area().add(label)
             for index, (caption, value) in enumerate(choices):
-                dialog.add_button(caption, index + 1)
+                i18n.add_buttons(dialog, 'add_button', caption, index + 1)
             dialog.show_all()
             response = dialog.run()
             if 1 <= response <= len(choices):
@@ -462,54 +509,54 @@ class TransferWindow(Gtk.Window):
         try:
             host, port, user, password = self.saved_login()
             if not user:
-                self.login(error_message='请填写此设备的 SSH 用户名。')
+                self.login(error_message=tr('请填写此设备的 SSH 用户名。'))
             else:
                 self.begin_connect(host, port, user, password, prompt_failure=True)
         except Exception as exception:
-            self.login(error_message='无法读取登录信息：' + str(exception))
+            self.login(error_message=tr('无法读取登录信息：') + str(exception))
         return False
 
     def login(self, *_, error_message=None):
         if self.closed or self.connecting:
             return
         if any(task['status'] in ACTIVE_TASKS for task in self.tasks):
-            self.state.set_text('请先完成或取消传输任务')
+            i18n.set_text(self.state, 'set_text', tr('请先完成或取消传输任务'))
             return
-        dialog = AnimatedDialog(title='连接文件传输', transient_for=self, modal=True)
+        dialog = i18n.create(AnimatedDialog, title=tr('连接文件传输'), transient_for=self, modal=True)
         grid = Gtk.Grid(column_spacing=14, row_spacing=12, margin=24)
         fields = {}
         for row, (key, label, value) in enumerate([
-            ('host', '主机', ssh_host(self.entry['address'])),
-            ('port', 'SSH 端口', str(self.entry.get('ssh_port', 22))),
-            ('user', '用户名', self.entry.get('ssh_username') or self.entry.get('username', '')),
-            ('password', 'SSH 密码', '')]):
-            field = Gtk.Entry(text=value)
+            ('host', tr('主机'), ssh_host(self.entry['address'])),
+            ('port', tr('SSH 端口'), str(self.entry.get('ssh_port', 22))),
+            ('user', tr('用户名'), self.entry.get('ssh_username') or self.entry.get('username', '')),
+            ('password', tr('SSH 密码'), '')]):
+            field = i18n.create(Gtk.Entry, text=value)
             if key == 'host':
                 field.set_editable(False)
-                field.set_tooltip_text('使用当前设备的地址')
+                i18n.set_text(field, 'set_tooltip_text', tr('使用当前设备的地址'))
             if key == 'password':
                 field.set_visibility(False)
-                field.set_placeholder_text('留空使用 SSH 密钥 / Agent')
+                i18n.set_text(field, 'set_placeholder_text', tr('留空使用 SSH 密钥 / Agent'))
             fields[key] = field
-            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(i18n.create(Gtk.Label, label=label, xalign=0), 0, row, 1, 1)
             grid.attach(field, 1, row, 1, 1)
-        remember = Gtk.CheckButton(label='将 SSH 密码保存到系统钥匙环')
+        remember = i18n.create(Gtk.CheckButton, label=tr('将 SSH 密码保存到系统钥匙环'))
         grid.attach(remember, 0, 4, 2, 1)
-        note = Gtk.Label(label='默认使用远程登录密码；SSH 密码不同时可在此修改。', wrap=True, max_width_chars=45, xalign=0)
+        note = i18n.create(Gtk.Label, label=tr('默认使用远程登录密码；SSH 密码不同时可在此修改。'), wrap=True, max_width_chars=45, xalign=0)
         note.get_style_context().add_class('muted')
         grid.attach(note, 0, 5, 2, 1)
-        error = Gtk.Label(label=error_message or '', xalign=0, wrap=True, max_width_chars=45)
+        error = i18n.create(Gtk.Label, label=error_message or '', xalign=0, wrap=True, max_width_chars=45)
         grid.attach(error, 0, 6, 2, 1)
         identity = self.entry.get('credential_id')
         try:
             if identity:
                 saved = credentials.lookup(identity + ':sftp') or credentials.lookup(identity)
-                fields['password'].set_text(saved)
+                i18n.set_text(fields['password'], 'set_text', saved)
                 remember.set_active(bool(saved))
         except Exception as exception:
-            error.set_text('钥匙环读取失败：' + str(exception))
+            i18n.set_text(error, 'set_text', tr('钥匙环读取失败：') + str(exception))
         dialog.get_content_area().add(grid)
-        dialog.add_buttons('取消', Gtk.ResponseType.CANCEL, '连接', Gtk.ResponseType.OK)
+        i18n.add_buttons(dialog, 'add_buttons', tr('取消'), Gtk.ResponseType.CANCEL, tr('连接'), Gtk.ResponseType.OK)
         dialog.get_widget_for_response(Gtk.ResponseType.OK).get_style_context().add_class('suggested-action')
         dialog.show_all()
         while dialog.run() == Gtk.ResponseType.OK:
@@ -517,25 +564,27 @@ class TransferWindow(Gtk.Window):
                 host, user = fields['host'].get_text().strip(), fields['user'].get_text().strip()
                 port = int(fields['port'].get_text())
                 if not host or not user or not 1 <= port <= 65535:
-                    raise ValueError('请输入主机、用户名和有效端口')
+                    raise ValueError(tr('请输入主机、用户名和有效端口'))
                 password = fields['password'].get_text()
                 self.begin_connect(host, port, user, password,
                                    remember=remember.get_active(), prompt_failure=True)
                 break
             except Exception as exception:
-                error.set_text(str(exception))
+                i18n.set_text(error, 'set_text', str(exception))
         dialog.destroy()
 
     def begin_connect(self, host, port, user, password, remember=None, prompt_failure=False):
         if self.closed or self.connecting:
             return
         self.connecting = True
-        self.state.set_text('正在连接…')
+        i18n.set_text(self.state, 'set_text', tr('正在连接…'))
         self.other.set_sensitive(False)
         self.other.generation += 1
         self.other.path = None
+        self.other.forward_paths.clear()
+        self.other.update_path_actions()
         self.other.model.clear()
-        self.other.location.set_text('')
+        i18n.set_text(self.other.location, 'set_text', '')
         self.update_transfer_actions()
         def run():
             try:
@@ -543,7 +592,7 @@ class TransferWindow(Gtk.Window):
                     self.client.close()
                 self.client = self.remote = self.browse_remote = None
                 def approve(hostname, fingerprint):
-                    return self.ask('确认远程设备身份', hostname + '\n\n主机指纹\n' + fingerprint + '\n\n请核对后再信任此设备。', [('取消', False), ('信任并连接', True)]) is True
+                    return self.ask(tr('确认远程设备身份'), hostname + tr('\n\n主机指纹\n') + fingerprint + tr('\n\n请核对后再信任此设备。'), [(tr('取消'), False), (tr('信任并连接'), True)]) is True
                 self.client, self.remote = connect(host, port, user, password, approve)
                 # A distinct session avoids sharing SFTP request/response state
                 # between the transfer worker and the browser worker.
@@ -561,11 +610,11 @@ class TransferWindow(Gtk.Window):
                     if remember is not None and self.entry.get('credential_id'):
                         try:
                             credentials.store(self.entry['credential_id'] + ':sftp',
-                                              '文件传输 · ' + self.entry.get('name', host),
+                                              tr('文件传输 · ') + self.entry.get('name', host),
                                               password if remember else '')
                         except Exception as exception:
                             self.ask_save_error(str(exception))
-                    self.state.set_text('已连接 · ' + host)
+                    i18n.set_text(self.state, 'set_text', tr('已连接 · ') + host)
                     self.other.set_sensitive(True)
                     self.other.load(path, canonical=True)
                 GLib.idle_add(ready)
@@ -578,8 +627,8 @@ class TransferWindow(Gtk.Window):
                         if not self.closed:
                             self.connecting = False
                             self.update_transfer_actions()
-                            self.state.set_text('连接失败')
-                            self.login(error_message='SSH 连接失败，请检查用户名、密码和端口。\n' + message)
+                            i18n.set_text(self.state, 'set_text', tr('连接失败'))
+                            self.login(error_message=tr('SSH 连接失败，请检查用户名、密码和端口。\n') + message)
                         return False
                     GLib.idle_add(failed)
                 else:
@@ -593,26 +642,26 @@ class TransferWindow(Gtk.Window):
         self.submit(run)
 
     def ask_save_error(self, message):
-        dialog = AnimatedDialog(title='无法保存 SSH 密码', transient_for=self, modal=True)
-        dialog.get_content_area().add(Gtk.Label(label=message, wrap=True, margin=24))
-        dialog.add_button('关闭', Gtk.ResponseType.CLOSE)
+        dialog = i18n.create(AnimatedDialog, title=tr('无法保存 SSH 密码'), transient_for=self, modal=True)
+        dialog.get_content_area().add(i18n.create(Gtk.Label, label=message, wrap=True, margin=24))
+        i18n.add_buttons(dialog, 'add_button', tr('关闭'), Gtk.ResponseType.CLOSE)
         dialog.connect('response', lambda *_: dialog.destroy())
         dialog.show_all()
 
     def enqueue(self, paths, upload):
         destination = self.other.path if upload else self.local.path
         if not self.remote or not destination:
-            (self.other if upload else self.local).note.set_text('请先连接设备并打开目标文件夹')
+            i18n.set_text((self.other if upload else self.local).note, 'set_text', tr('请先连接设备并打开目标文件夹'))
             return
         # Selecting a directory and its child should not send the child twice.
         separator = '/' if not upload else os.sep
         paths = [p for p in paths if not any(p.startswith(other.rstrip(separator) + separator) for other in paths if p != other)]
         if not paths:
-            (self.local if upload else self.other).note.set_text('请先选择文件或文件夹')
+            i18n.set_text((self.local if upload else self.other).note, 'set_text', tr('请先选择文件或文件夹'))
         for path in dict.fromkeys(paths):
             task = dict(path=path, destination=destination, upload=upload, cancel=threading.Event(), status='等待中')
             self.tasks.append(task)
-            task['iter'] = self.task_model.append([os.path.basename(path.rstrip('/')), '上传' if upload else '下载', '等待中', 0, '', path + '\n→ ' + destination, task, '取消'])
+            task['iter'] = self.task_model.append([os.path.basename(path.rstrip('/')), tr('上传') if upload else tr('下载'), tr('等待中'), 0, '', path + '\n→ ' + destination, task, tr('取消')])
             self.schedule(task)
         self.update_task_actions()
 
@@ -637,13 +686,14 @@ class TransferWindow(Gtk.Window):
                 if task['cancel'].is_set():
                     return 'cancel'
                 if policy[0] is None:
-                    policy[0] = self.ask('目标已有同名文件', path + '\n\n本任务后续同名文件也使用此选项。文件夹会合并。', [('取消任务', 'cancel'), ('跳过', 'skip'), ('保留两份', 'rename'), ('覆盖', 'overwrite')])
+                    policy[0] = self.ask(tr('目标已有同名文件'), path + tr('\n\n本任务后续同名文件也使用此选项。文件夹会合并。'), [(tr('取消任务'), 'cancel'), (tr('跳过'), 'skip'), (tr('保留两份'), 'rename'), (tr('覆盖'), 'overwrite')])
                 return policy[0]
             try:
                 local = LocalFiles()
                 source, destination = (local, self.remote) if task['upload'] else (self.remote, local)
                 skipped = transfer(source, destination, task['path'], task['destination'], task['cancel'], progress, conflict)
-                status = '已完成' if not skipped else f'已完成 · 跳过 {skipped} 项'
+                status = '已完成'
+                task['skipped'] = skipped
                 task['status'] = status
                 GLib.idle_add(self.update_task, task, task.get('done', 0), task.get('total', 0), status, '')
                 GLib.idle_add(self.other.refresh if task['upload'] else self.local.refresh)
@@ -666,9 +716,11 @@ class TransferWindow(Gtk.Window):
             summary = human_size(total) if total else ''
             if detail and status in ACTIVE_TASKS:
                 summary += (' · ' if summary else '') + detail
-            self.task_model.set(row, 2, status, 3, min(100, int(100 * done / total)) if total else (100 if status.startswith('已完成') else 0),
+            display_status = (tr('已完成 · 跳过 {count} 项').format(count=task['skipped'])
+                              if status == '已完成' and task.get('skipped') else tr(status))
+            self.task_model.set(row, 2, display_status, 3, min(100, int(100 * done / total)) if total else (100 if status.startswith('已完成') else 0),
                                 4, summary, 5, task['path'] + '\n→ ' + task['destination'] + '\n' + detail,
-                                7, '取消' if status in ACTIVE_TASKS and not cancelling else ('重试' if status in ('失败', '已取消') else ''))
+                                7, tr('取消') if status in ACTIVE_TASKS and not cancelling else (tr('重试') if status in ('失败', '已取消') else ''))
             self.update_task_actions()
 
     def task_action(self, path):
@@ -719,9 +771,9 @@ class TransferWindow(Gtk.Window):
 
     def close_requested(self, *_):
         if any(t['status'] in ACTIVE_TASKS for t in self.tasks):
-            dialog = AnimatedDialog(title='停止传输？', transient_for=self, modal=True)
-            dialog.get_content_area().add(Gtk.Label(label='关闭此窗口将取消未完成的传输。', margin=24))
-            dialog.add_buttons('继续传输', Gtk.ResponseType.CANCEL, '取消传输并关闭', Gtk.ResponseType.OK)
+            dialog = i18n.create(AnimatedDialog, title=tr('停止传输？'), transient_for=self, modal=True)
+            dialog.get_content_area().add(i18n.create(Gtk.Label, label=tr('关闭此窗口将取消未完成的传输。'), margin=24))
+            i18n.add_buttons(dialog, 'add_buttons', tr('继续传输'), Gtk.ResponseType.CANCEL, tr('取消传输并关闭'), Gtk.ResponseType.OK)
             dialog.show_all()
             response = dialog.run()
             dialog.destroy()

@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory() as temporary:
     parent = viewer.Viewer(show_window=False)
     entry = dict(name='Test device', address='192.0.2.20', username='test-user', credential_id='test-id')
     window = file_transfer.TransferWindow(parent, entry)
+    def button_size(widget):
+        return widget.get_preferred_width()[1], widget.get_preferred_height()[1]
+    initial_button_size = button_size(window.login_button)
     original_lookup, original_connect = file_transfer.credentials.lookup, file_transfer.connect
     original_store = file_transfer.credentials.store
     passwords = {'test-id': 'test-password'}
@@ -49,7 +52,11 @@ with tempfile.TemporaryDirectory() as temporary:
     window.login = lambda *args, **kwargs: prompts.append(kwargs.get('error_message'))
     try:
         window.auto_connect()
+        assert window.login_button.get_label() == '连接'
+        assert button_size(window.login_button) == initial_button_size
         until(lambda: not window.connecting)
+        assert window.connection_more.get_label() == '连接'
+        assert button_size(window.connection_more) == initial_button_size
         assert attempts == [('192.0.2.20', 22, 'test-user', 'test-password')]
         assert not prompts and not writes and window.remote is not None
         entry.update(ssh_username='ssh-user', ssh_port=2222)

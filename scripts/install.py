@@ -29,16 +29,20 @@ def main():
     applications = data / 'applications'
     applications.mkdir(parents=True, exist_ok=True)
     desktop = applications / 'vncming.desktop'
+    icon_file = data / 'icons/hicolor/256x256/apps/vncming-portal.png'
     desktop.write_text('[Desktop Entry]\nType=Application\nName=VNCMing\nName[zh_CN]=VNCMing\n'
         'Comment=VNCMing 远程桌面连接\nExec=' + desktop_quote(binary) + '\n'
-        'Icon=vncming-orange\nTerminal=false\nCategories=Network;RemoteAccess;\n'
+        'Icon=' + str(icon_file) + '\nTerminal=false\nCategories=Network;RemoteAccess;\n'
         'StartupWMClass=VNCMing\nKeywords=VNCMing;VNC;远程桌面;\n')
     icon_root = data / 'icons/hicolor'
-    with Image.open(ROOT / 'assets/vncming-orange.png') as image:
+    with Image.open(ROOT / 'assets/vncming-portal.png') as image:
         for size in (16, 24, 32, 48, 64, 128, 256):
-            destination = icon_root / f'{size}x{size}/apps/vncming-orange.png'
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            image.resize((size,size), getattr(Image, 'Resampling', Image).LANCZOS).save(destination)
+            resized = image.resize((size,size), getattr(Image, 'Resampling', Image).LANCZOS)
+            # Existing GNOME app-grid actors can retain the previous icon name.
+            for name in ('vncming-portal', 'vncming-orange'):
+                destination = icon_root / f'{size}x{size}/apps/{name}.png'
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                resized.save(destination)
     config = Path(os.environ.get('XDG_CONFIG_HOME', str(home / '.config')))
     old, new = config / 'tigervnc-classic/connections.json', config / 'vncming/connections.json'
     if old.exists() and not new.exists():

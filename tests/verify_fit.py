@@ -176,7 +176,7 @@ def check(fullscreen, maximized=False, resize_supported=False, resolution=None, 
             time.sleep(.35)
             subprocess.run(['xdotool','mousemove','--window',window,str(width-145),'22','click','1'],check=True)
             time.sleep(.2)
-            subprocess.run(['xdotool','key','Up','Up','Return'],check=True)
+            subprocess.run(['xdotool','key','Down','Down','Down','Return'],check=True)
             for _ in range(60):
                 if tuple(remote_dimensions)==(1280,720): break
                 time.sleep(.05)

@@ -55,7 +55,7 @@ static LogWriter vlog("ServerDialog");
 const char* SERVER_HISTORY="tigervnc.history";
 
 ServerDialog::ServerDialog()
-  : MotionWindow(450, 190, "新建连接 — VNCMing")
+  : MotionWindow(450, 190, p_("VNCMing", "New Connection — VNCMing"))
 {
   color(fl_rgb_color(250,249,247));
   int x, y;
@@ -63,12 +63,12 @@ ServerDialog::ServerDialog()
   Fl_Box *divider;
 
   int margin = 20;
-  int server_label_width = gui_str_len("IP地址");
+  int server_label_width = gui_str_len(p_("VNCMing", "IP Address"));
 
   x = margin + server_label_width;
   y = margin;
   
-  serverName = new Fl_Input_Choice(x, y, w() - margin*2 - server_label_width, INPUT_HEIGHT, "IP地址");
+  serverName = new Fl_Input_Choice(x, y, w() - margin*2 - server_label_width, INPUT_HEIGHT, p_("VNCMing", "IP Address"));
 
   serverName->input()->box(modernInputBox());
   serverName->input()->color(FL_WHITE);
@@ -116,8 +116,8 @@ ServerDialog::ServerDialog()
   x += adjust;
 
   button = new MacReturnButton(x, y, button_width+20, BUTTON_HEIGHT, _("Connect"));
-  button->color(fl_rgb_color(245,128,37));
-  button->labelcolor(FL_WHITE);
+  button->color(fl_rgb_color(255,253,248));
+  button->labelcolor(fl_rgb_color(68,58,51));
   button->callback(this->handleConnect, this);
 
   callback(this->handleCancel, this);
@@ -173,8 +173,8 @@ void ServerDialog::handleLoad(Fl_Widget *widget, void *data)
   ServerDialog *dialog = (ServerDialog*)data;
   Fl_Native_File_Chooser file_chooser;
   file_chooser.type(Fl_Native_File_Chooser::BROWSE_FILE);
-  file_chooser.title("打开 VNCMing 配置");
-  file_chooser.filter("VNC 配置\t*.tigervnc");
+  file_chooser.title(p_("VNCMing", "Open VNCMing Configuration"));
+  file_chooser.filter(p_("VNCMing", "VNC Configuration\t*.tigervnc"));
   if (file_chooser.show() != 0) return;
   const char* filename = file_chooser.filename();
 
@@ -197,8 +197,8 @@ void ServerDialog::handleSaveAs(Fl_Widget *widget, void *data)
 
   Fl_Native_File_Chooser file_chooser;
   file_chooser.type(Fl_Native_File_Chooser::BROWSE_SAVE_FILE);
-  file_chooser.title("保存 VNCMing 配置");
-  file_chooser.filter("VNC 配置\t*.tigervnc");
+  file_chooser.title(p_("VNCMing", "Save VNCMing Configuration"));
+  file_chooser.filter(p_("VNCMing", "VNC Configuration\t*.tigervnc"));
   file_chooser.options(Fl_Native_File_Chooser::SAVEAS_CONFIRM);
   if (file_chooser.show() != 0) return;
   filename = file_chooser.filename();

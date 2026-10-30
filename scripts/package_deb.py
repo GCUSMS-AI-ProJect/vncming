@@ -28,7 +28,7 @@ def copy(source, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='1.0.3')
+    parser.add_argument('--version', default='1.3.6')
     args = parser.parse_args()
     subprocess.run(['dpkg', '--validate-version', args.version], check=True)
     architecture = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
@@ -45,7 +45,8 @@ def main():
         for path in (ROOT / 'app').iterdir():
             if path.suffix in ('.py', '.css'):
                 copy(path, program / 'app' / path.name)
-        copy(ROOT / 'assets/vncming-orange.png', program / 'assets/vncming-orange.png')
+        copy(ROOT / 'assets/vncming-portal.png', program / 'assets/vncming-portal.png')
+        copy(ROOT / 'assets/vncming-portal.svg', program / 'assets/vncming-portal.svg')
         for directory in ('transfer', 'actions'):
             for path in (ROOT / 'assets' / directory).iterdir():
                 if path.is_file():
@@ -55,24 +56,28 @@ def main():
         native = program / 'build/vncviewer/vncviewer'
         copy(ROOT / 'build/vncviewer/vncviewer', native)
         native.chmod(0o755)
+        copy(ROOT / 'build/locale/zh_CN/LC_MESSAGES/tigervnc.mo',
+             program / 'build/locale/zh_CN/LC_MESSAGES/tigervnc.mo')
         subprocess.run(['strip', '--strip-unneeded', str(native)], check=True)
         write(stage / 'usr/bin/vncming', '#!/bin/sh\nexec /usr/lib/vncming/vncming "$@"\n', True)
         desktop = stage / 'usr/share/applications/vncming.desktop'
         write(desktop, '[Desktop Entry]\nType=Application\nName=VNCMing\nName[zh_CN]=VNCMing\n'
               'Comment=VNC remote desktop client\nComment[zh_CN]=VNC 远程桌面连接\n'
-              'Exec=/usr/bin/vncming\nIcon=vncming-orange\nTerminal=false\n'
+              'Exec=/usr/bin/vncming\nIcon=vncming-portal\nTerminal=false\n'
               'Categories=Network;RemoteAccess;\nStartupWMClass=VNCMing\n'
               'Keywords=VNCMing;VNC;远程桌面;\n')
         subprocess.run(['desktop-file-validate', str(desktop)], check=True)
         for name in ('extension.js', 'metadata.json'):
             copy(ROOT / 'integrations/gnome-shell/vncming-app-grid@local' / name,
                  stage / 'usr/share/gnome-shell/extensions/vncming-app-grid@local' / name)
-        with Image.open(ROOT / 'assets/vncming-orange.png') as image:
+        with Image.open(ROOT / 'assets/vncming-portal.png') as image:
             for size in (16, 24, 32, 48, 64, 128, 256):
-                icon = stage / f'usr/share/icons/hicolor/{size}x{size}/apps/vncming-orange.png'
-                icon.parent.mkdir(parents=True, exist_ok=True)
-                image.resize((size, size), getattr(Image, 'Resampling', Image).LANCZOS).save(icon)
-                icon.chmod(0o644)
+                resized = image.resize((size, size), getattr(Image, 'Resampling', Image).LANCZOS)
+                for name in ('vncming-portal', 'vncming-orange'):
+                    icon = stage / f'usr/share/icons/hicolor/{size}x{size}/apps/{name}.png'
+                    icon.parent.mkdir(parents=True, exist_ok=True)
+                    resized.save(icon)
+                    icon.chmod(0o644)
         doc = stage / 'usr/share/doc/vncming'
         for name in ('README.md', 'NOTICE.md', 'LICENSE'):
             copy(ROOT / name, doc / name)

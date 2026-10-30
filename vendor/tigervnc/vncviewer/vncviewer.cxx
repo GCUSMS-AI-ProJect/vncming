@@ -170,7 +170,7 @@ bool should_disconnect()
 
 void about_vncviewer()
 {
-  vncMessageTitle(_("关于 VNCMing"));
+  vncMessageTitle(p_("VNCMing", "About VNCMing"));
   vncMessage("%s", about_text());
 }
 
@@ -210,9 +210,8 @@ static void mainloop(const char* vncserver, network::Socket* sock)
 
     if(reconnectOnError && (sock == NULL)) {
       int ret;
-      ret = vncChoice(_("%s\n\n"
-                        "是否重新连接？"),
-                      NULL, "重新连接", "关闭", exitError);
+      ret = vncChoice(p_("VNCMing", "%s\n\nReconnect?"),
+                      NULL, p_("VNCMing", "Reconnect"), p_("VNCMing", "Close"), exitError);
       free(exitError);
       exitError = NULL;
       if (ret == 1)
@@ -268,6 +267,8 @@ static void CleanupSignalHandler(int sig)
 
 static const char* getlocaledir()
 {
+  const char* overrideDirectory = getenv("VNCMING_LOCALEDIR");
+  if (overrideDirectory && overrideDirectory[0]) return overrideDirectory;
 #if defined(WIN32)
   static char localebuf[PATH_MAX];
   char *slash;

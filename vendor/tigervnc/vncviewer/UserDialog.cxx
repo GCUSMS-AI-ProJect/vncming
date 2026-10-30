@@ -205,11 +205,11 @@ void UserDialog::getUserPasswd(bool secure, char** user, char** password)
 
   int y;
 
-  win = new MotionWindow(460, 300, "身份验证 — VNCMing");
+  win = new MotionWindow(460, 300, p_("VNCMing", "Authentication — VNCMing"));
   win->color(fl_rgb_color(250, 249, 247));
   win->callback(button_cb,(void *)0);
 
-  banner = new Fl_Box(24, 18, win->w()-48, 34, "连接到远程桌面");
+  banner = new Fl_Box(24, 18, win->w()-48, 34, p_("VNCMing", "Connect to Remote Desktop"));
   banner->box(FL_FLAT_BOX);
   banner->color(fl_rgb_color(250, 249, 247));
   banner->labelcolor(fl_rgb_color(55, 50, 45));
@@ -218,14 +218,14 @@ void UserDialog::getUserPasswd(bool secure, char** user, char** password)
   banner->labelsize(18);
   y = 68;
   Fl_Box *security = new Fl_Box(24, y, win->w()-48, 30,
-      secure ? "此连接已加密" : "此连接未加密");
+      secure ? p_("VNCMing", "This connection is encrypted") : p_("VNCMing", "This connection is not encrypted"));
   security->box(macBox());
   security->color(secure ? fl_rgb_color(235, 246, 240) : fl_rgb_color(255, 244, 225));
   security->labelcolor(secure ? fl_rgb_color(40, 105, 75) : fl_rgb_color(135, 90, 30));
   security->align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE);
   y += 46;
   if (user) {
-    (new Fl_Box(24, y, 90, 34, "用户名"))->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE);
+    (new Fl_Box(24, y, 90, 34, p_("VNCMing", "Username")))->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE);
     username = new ModernInput(114, y, win->w()-138, 34);
     username->box(modernInputBox());
     username->color(FL_WHITE);
@@ -233,22 +233,22 @@ void UserDialog::getUserPasswd(bool secure, char** user, char** password)
   } else {
     username = NULL;
   }
-  (new Fl_Box(24, y, 90, 34, "密码"))->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE);
+  (new Fl_Box(24, y, 90, 34, p_("VNCMing", "Password")))->align(FL_ALIGN_LEFT|FL_ALIGN_INSIDE);
   passwd = new ModernSecretInput(114, y, win->w()-138, 34);
   passwd->box(modernInputBox());
   passwd->color(FL_WHITE);
   y += 46;
-  RememberCredentialsButton* remember = new RememberCredentialsButton(114, y, 322, 28, "保存用户名和密码");
+  RememberCredentialsButton* remember = new RememberCredentialsButton(114, y, 322, 28, p_("VNCMing", "Save username and password"));
   remember->value(1);
-  remember->tooltip("连接成功后保存到系统钥匙环");
+  remember->tooltip(p_("VNCMing", "Save to the system keyring after connecting"));
   y += 46;
 
-  button = new MacReturnButton(326, y, 110, 34, "连接");
+  button = new MacReturnButton(326, y, 110, 34, p_("VNCMing", "Connect"));
   button->box(macBox());
-  button->color(fl_rgb_color(245, 128, 37));
-  button->labelcolor(FL_WHITE);
+  button->color(fl_rgb_color(255, 253, 248));
+  button->labelcolor(fl_rgb_color(68, 58, 51));
   button->callback(button_cb, (void*)0);
-  button = new MacButton(204, y, 110, 34, "取消");
+  button = new MacButton(204, y, 110, 34, p_("VNCMing", "Cancel"));
   button->box(macBox());
   button->color(fl_rgb_color(250, 247, 243));
   button->callback(button_cb, (void*)1);

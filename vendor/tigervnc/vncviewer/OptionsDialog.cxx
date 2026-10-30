@@ -55,7 +55,7 @@ using namespace rfb;
 std::map<OptionsCallback*, void*> OptionsDialog::callbacks;
 
 OptionsDialog::OptionsDialog()
-  : MotionWindow(450, 450, "连接选项 — VNCMing")
+  : MotionWindow(450, 450, p_("VNCMing", "Connection Options — VNCMing"))
 {
   color(fl_rgb_color(246, 245, 243));
   int x, y;
@@ -82,15 +82,15 @@ OptionsDialog::OptionsDialog()
   x = w() - BUTTON_WIDTH * 2 - INNER_MARGIN - OUTER_MARGIN;
   y = h() - BUTTON_HEIGHT - OUTER_MARGIN;
 
-  button = new MacButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, "取消");
+  button = new MacButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, p_("VNCMing", "Cancel"));
   button->callback(this->handleCancel, this);
 
   x += BUTTON_WIDTH + INNER_MARGIN;
 
-  button = new MacReturnButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, "确定");
+  button = new MacReturnButton(x, y, BUTTON_WIDTH, BUTTON_HEIGHT, p_("VNCMing", "OK"));
   button->box(macBox());
-  button->color(fl_rgb_color(245, 128, 37));
-  button->labelcolor(FL_WHITE);
+  button->color(fl_rgb_color(255, 253, 248));
+  button->labelcolor(fl_rgb_color(68,58,51));
   button->callback(this->handleOK, this);
 
   callback(this->handleCancel, this);

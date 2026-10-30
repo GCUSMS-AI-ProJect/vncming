@@ -1,4 +1,5 @@
 """SSH connection and recursive transfers, independent of the GTK interface."""
+from i18n import tr
 import base64
 import errno
 import hashlib
@@ -31,7 +32,7 @@ def connect(host, port, username, password, approve_key, known_hosts=None):
         def missing_host_key(self, ssh, hostname, key):
             fingerprint = 'SHA256:' + base64.b64encode(hashlib.sha256(key.asbytes()).digest()).decode().rstrip('=')
             if not approve_key(hostname, fingerprint):
-                raise Cancelled('未确认远端身份')
+                raise Cancelled(tr('未确认远端身份'))
             path.parent.mkdir(parents=True, exist_ok=True)
             ssh.get_host_keys().add(hostname, key.get_name(), key)
             ssh.save_host_keys(str(path))
@@ -112,7 +113,7 @@ def exists(files, path):
 
 def safe_name(name):
     if name in ('', '.', '..') or '/' in name or '\x00' in name:
-        raise ValueError('无效文件名称')
+        raise ValueError(tr('无效文件名称'))
     return name
 
 
@@ -121,14 +122,14 @@ def transfer(source, destination, source_path, destination_dir, cancelled, progr
     """Plan before copying, preserve empty directories, publish only complete files."""
     def check():
         if cancelled.is_set():
-            raise Cancelled('已取消')
+            raise Cancelled(tr('已取消'))
     plan = []
     snapshots = {}
     def walk(path, relative):
         check()
         info = source.info(path)
         if stat.S_ISLNK(info.st_mode):
-            raise ValueError('暂不传输符号链接：' + path)
+            raise ValueError(tr('暂不传输符号链接：') + path)
         if stat.S_ISDIR(info.st_mode):
             plan.append((path, relative, True, 0))
             for name, _ in sorted(source.listing(path)):
@@ -137,7 +138,7 @@ def transfer(source, destination, source_path, destination_dir, cancelled, progr
             snapshots[path] = (info.st_size, info.st_mtime)
             plan.append((path, relative, False, info.st_size))
         else:
-            raise ValueError('不支持特殊文件：' + path)
+            raise ValueError(tr('不支持特殊文件：') + path)
     walk(source_path, [safe_name(source.basename(source_path.rstrip('/')))])
     total = sum(item[3] for item in plan)
     done, skipped = 0, 0
@@ -147,15 +148,15 @@ def transfer(source, destination, source_path, destination_dir, cancelled, progr
         target = destination.join(destination_dir, *relative)
         present = exists(destination, target)
         if present and stat.S_ISLNK(present.st_mode):
-            raise ValueError('目标是符号链接，无法写入：' + target)
+            raise ValueError(tr('目标是符号链接，无法写入：') + target)
         if directory:
             if present and not stat.S_ISDIR(present.st_mode):
-                raise ValueError('目标已有同名文件：' + target)
+                raise ValueError(tr('目标已有同名文件：') + target)
             if not present:
                 destination.mkdir(target)
             continue
         if present and not stat.S_ISREG(present.st_mode):
-            raise ValueError('目标不是普通文件：' + target)
+            raise ValueError(tr('目标不是普通文件：') + target)
         overwrite = False
         if present:
             action = conflict(target)
@@ -174,7 +175,7 @@ def transfer(source, destination, source_path, destination_dir, cancelled, progr
             elif action == 'overwrite':
                 overwrite = True
             else:
-                raise Cancelled('已取消')
+                raise Cancelled(tr('已取消'))
         temporary = destination.join(destination.parent(target), '.vncming-' + uuid.uuid4().hex + '.part')
         try:
             with source.open(path, 'r') as reader, destination.open(temporary, 'wx') as writer:
@@ -188,10 +189,10 @@ def transfer(source, destination, source_path, destination_dir, cancelled, progr
                     copied += len(chunk)
                     progress(done + copied, total)
                 if copied != size:
-                    raise IOError('源文件在传输期间发生变化，请重试')
+                    raise IOError(tr('源文件在传输期间发生变化，请重试'))
                 current = source.info(path)
                 if (current.st_size, current.st_mtime) != snapshots[path]:
-                    raise IOError('源文件在传输期间发生变化，请重试')
+                    raise IOError(tr('源文件在传输期间发生变化，请重试'))
             check()
             destination.publish(temporary, target, overwrite)
         finally:

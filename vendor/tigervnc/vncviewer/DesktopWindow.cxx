@@ -42,6 +42,7 @@
 #include "Viewport.h"
 #include "touch.h"
 #include "MacMotion.h"
+#include "ToolbarResolutionChoice.h"
 
 #include <FL/Fl.H>
 #include <FL/Fl_PNG_Image.H>
@@ -87,7 +88,7 @@ class TransferButton : public MacButton {
 public:
   TransferButton(int x, int y) : MacButton(x, y, 40, 34), icon(NULL) {
     color(fl_rgb_color(250, 249, 247));
-    tooltip("文件传输");
+    tooltip(p_("VNCMing", "File Transfer"));
     clear_visible_focus();
     const char* asset = getenv("VNCMING_ICON");
     if (asset) {
@@ -146,13 +147,13 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
   }
 #endif
 
-  resolutionChoice = new ModernChoice(std::max(4, w-228), 5, 164, 34);
-  resolutionChoice->add("保持当前分辨率|随窗口调整|1280×720|1600×900|1920×1080|2560×1440|3840×2160");
+  resolutionChoice = new ToolbarResolutionChoice(std::max(12, w-272), 5, std::max(0,std::min(208,w-80)), 34);
+  resolutionChoice->add(p_("VNCMing", "Keep current resolution|Resize with window|1280×720|1600×900|1920×1080|2560×1440|3840×2160"));
   const char* sizes[] = {"", "", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
   int selected = ::remoteResize ? 1 : 0;
   for (int i=2; i<7; ++i) if (strcmp(desktopSize, sizes[i]) == 0) selected=i;
   resolutionChoice->value(selected);
-  resolutionChoice->tooltip("远程分辨率（需要服务器支持）");
+  resolutionChoice->tooltip(p_("VNCMing", "Remote resolution (requires server support)"));
   resolutionChoice->hide();
   resolutionChoice->callback([](Fl_Widget* widget, void* data) {
     DesktopWindow* self = static_cast<DesktopWindow*>(data);
@@ -160,7 +161,7 @@ DesktopWindow::DesktopWindow(int w, int h, const char *name,
     const char* sizes[] = {"", "", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"};
     int selected = choice->value();
     if (selected != 0 && !self->cc->server.supportsSetDesktopSize) {
-      vncAlert("此服务器尚未支持修改远程分辨率。当前画面分辨率保持不变。");
+      vncAlert(p_("VNCMing", "This server does not support changing the remote resolution yet. The current resolution is unchanged."));
       int previous = ::remoteResize ? 1 : 0;
       for (int i=2; i<7; ++i)
         if (strcmp(desktopSize, sizes[i]) == 0) previous=i;
@@ -632,16 +633,19 @@ void DesktopWindow::draw()
     fl_rectf(0, top, w(), 44, 246, 245, 243);
     fl_color(fl_rgb_color(228, 223, 217));
     fl_line(0, top+43, w(), top+43);
-    fl_color(fl_rgb_color(48, 128, 83));
-    fl_pie(16, top+18, 8, 8, 0, 360);
-    fl_color(fl_rgb_color(81, 74, 67));
-    fl_font(FL_HELVETICA, 14);
-    const char* address = getenv("VNCMING_TRANSFER_ADDRESS");
-    std::string status = "已连接";
-    if (address && *address) status += std::string(" · ") + address;
-    fl_push_clip(32, top, std::max(0, w()-276), 44);
-    fl_draw(status.c_str(), 32, top, std::max(0, w()-276), 44, FL_ALIGN_LEFT);
-    fl_pop_clip();
+    const int statusWidth = std::max(0, resolutionChoice->x()-44);
+    if (statusWidth > 0) {
+      fl_color(fl_rgb_color(48, 128, 83));
+      fl_pie(16, top+18, 8, 8, 0, 360);
+      fl_color(fl_rgb_color(81, 74, 67));
+      fl_font(FL_HELVETICA, 14);
+      const char* address = getenv("VNCMING_TRANSFER_ADDRESS");
+      std::string status = p_("VNCMing", "Connected");
+      if (address && *address) status += std::string(" · ") + address;
+      fl_push_clip(32, top, statusWidth, 44);
+      fl_draw(status.c_str(), 32, top, statusWidth, 44, FL_ALIGN_LEFT);
+      fl_pop_clip();
+    }
     if (transferButton) draw_child(*transferButton);
     draw_child(*resolutionChoice);
     fl_pop_clip();
@@ -920,7 +924,7 @@ void DesktopWindow::animateToolbar(void *data)
   self->toolbarOffset = self->toolbarFrom + (self->toolbarTarget - self->toolbarFrom) * ease;
   if (self->transferButton) self->transferButton->position(std::max(4, self->w()-52),
     static_cast<int>(std::lround(self->toolbarOffset)) + 5);
-  self->resolutionChoice->position(std::max(4, self->w()-228),
+  self->resolutionChoice->position(std::max(12, self->w()-272),
     static_cast<int>(std::lround(self->toolbarOffset)) + 5);
   // Restore the framebuffer beneath the panel; only repaint the top strip.
   self->damage(FL_DAMAGE_CHILD, 0, 0, self->w(), 44);
@@ -1581,8 +1585,8 @@ void DesktopWindow::remoteResize(int width, int height)
 
 void DesktopWindow::repositionWidgets()
 {
-  if (resolutionChoice) resolutionChoice->resize(std::max(4, w()-228),
-    static_cast<int>(std::lround(toolbarOffset))+5, 164, 34);
+  if (resolutionChoice) resolutionChoice->resize(std::max(12, w()-272),
+    static_cast<int>(std::lround(toolbarOffset))+5, std::max(0,std::min(208,w()-80)), 34);
   if (transferButton)
     transferButton->resize(std::max(4, w() - 52),
       static_cast<int>(std::lround(toolbarOffset)) + 5, 40, 34);

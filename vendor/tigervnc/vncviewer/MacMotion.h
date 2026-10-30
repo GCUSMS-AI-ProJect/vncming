@@ -140,17 +140,31 @@ template<class Base> class MotionButton : public Base {
     Fl::add_timeout(0,tick,this);
   }
 public:
+  void draw() {
+    // Monitor selectors supply their own patterned and selection boxes.
+    if (this->box() != macBox()) { Base::draw(); return; }
+    const bool outlined = hovering || Fl::focus() == this;
+    Fl_Color fill = this->active_r() ? this->color() : fl_inactive(this->color());
+    macRoundBox(this->x(), this->y(), this->w(), this->h(),
+                outlined ? fl_rgb_color(207,199,188) : fill);
+    if (outlined && this->w() > 2 && this->h() > 2)
+      macRoundBox(this->x()+1, this->y()+1, this->w()-2, this->h()-2, fill);
+    this->draw_label();
+  }
   MotionButton(int x,int y,int w,int h,const char *s=0):Base(x,y,w,h,s),hovering(false),paletteReady(false) {
     this->box(macBox()); this->down_box(macBox());
+    this->color(fl_rgb_color(255,253,248));
+    this->labelcolor(fl_rgb_color(68,58,51));
     rest=from=target=this->color(); began=0;
   }
   ~MotionButton() { Fl::remove_timeout(tick,this); }
   int handle(int e) {
     if(!paletteReady && (e==FL_ENTER || e==FL_PUSH)) { rest=this->color(); paletteReady=true; }
-    if(e==FL_ENTER) { hovering=true; animate(fl_color_average(rest,FL_WHITE,0.85f)); }
+    if(e==FL_ENTER) { hovering=true; animate(fl_rgb_color(248,245,239)); }
     if(e==FL_LEAVE) { hovering=false; animate(rest); }
-    if(e==FL_PUSH) animate(fl_color_average(rest,FL_BLACK,0.88f));
-    if(e==FL_RELEASE) animate(hovering?fl_color_average(rest,FL_WHITE,0.85f):rest);
+    if(e==FL_PUSH) animate(fl_rgb_color(238,235,228));
+    if(e==FL_RELEASE) animate(hovering?fl_rgb_color(248,245,239):rest);
+    if(e==FL_FOCUS || e==FL_UNFOCUS) this->redraw();
     return Base::handle(e);
   }
 };
@@ -159,7 +173,7 @@ class MacReturnButton : public MotionButton<Fl_Return_Button> {
 public:
   MacReturnButton(int x,int y,int w,int h,const char* label=0)
     : MotionButton<Fl_Return_Button>(x,y,w,h,label) {}
-  void draw() { Fl_Button::draw(); }
+  void draw() { MotionButton<Fl_Return_Button>::draw(); }
 };
 
 class MotionWindow : public Fl_Window {

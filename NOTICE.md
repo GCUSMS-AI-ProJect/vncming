@@ -7,7 +7,11 @@ All upstream copyright headers and license files remain in `vendor/tigervnc`.
 Some vendored components carry their own licenses; consult the files alongside
 those components.
 
-The orange VNCMing PNG derives from the VNC lettermark used in the existing
-local VNCMing application, visually based on the RealVNC icon shown in
+The active application icon is `assets/vncming-portal.png`, rendered from the
+original editable `assets/vncming-portal.svg` apricot-and-coral connection mark.
+Its design and export process are documented in `assets/ICON_DESIGN.md`.
+
+The historical, unused `assets/vncming-orange.png` derives from the VNC lettermark
+used in the previous local VNCMing application, visually based on the RealVNC icon shown in
 https://vlab.ustc.edu.cn/docs/login/vnc/. It is not an upstream TigerVNC icon.
 The code license does not grant rights in third-party trademarks or artwork.

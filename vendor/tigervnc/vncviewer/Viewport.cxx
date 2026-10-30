@@ -1297,15 +1297,15 @@ void Viewport::initContextMenu()
 {
   contextMenu->clear();
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "断开连接"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Disconnect"),
                 0, NULL, (void*)ID_DISCONNECT, FL_MENU_DIVIDER);
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "全屏"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Full Screen"),
                 0, NULL, (void*)ID_FULLSCREEN,
                 FL_MENU_TOGGLE | (window()->fullscreen_active()?FL_MENU_VALUE:0));
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "最小化"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Minimize"),
                 0, NULL, (void*)ID_MINIMIZE, 0);
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "窗口适配远程桌面"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Resize Window to Fit Desktop"),
                 0, NULL, (void*)ID_RESIZE,
                 (window()->fullscreen_active()?FL_MENU_INACTIVE:0) |
                 FL_MENU_DIVIDER);
@@ -1325,22 +1325,22 @@ void Viewport::initContextMenu()
                   (void*)ID_MENUKEY, FL_MENU_INVISIBLE);
   }
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "发送 Ctrl-Alt-Del"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Send Ctrl-Alt-Del"),
                 0, NULL, (void*)ID_CTRLALTDEL, FL_MENU_DIVIDER);
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "刷新画面"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Refresh Screen"),
                 0, NULL, (void*)ID_REFRESH, FL_MENU_DIVIDER);
 
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "连接选项…"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Connection Options…"),
                 0, NULL, (void*)ID_OPTIONS, 0);
 #ifdef __linux__
   if (getenv("VNCMING_TRANSFER_LAUNCHER") && getenv("VNCMING_TRANSFER_ADDRESS"))
-    fltk_menu_add(contextMenu, p_("ContextMenu|", "文件传输…"),
+    fltk_menu_add(contextMenu, p_("VNCMing", "File Transfer…"),
                   0, NULL, (void*)ID_FILES, 0);
 #endif
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "连接信息…"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "Connection Information…"),
                 0, NULL, (void*)ID_INFO, 0);
-  fltk_menu_add(contextMenu, p_("ContextMenu|", "关于 VNCMing…"),
+  fltk_menu_add(contextMenu, p_("VNCMing", "About VNCMing…"),
                 0, NULL, (void*)ID_ABOUT, 0);
 }
 

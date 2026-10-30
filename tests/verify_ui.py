@@ -81,7 +81,7 @@ transfer_result = Path(transfer_fixture.name) / 'arguments'
 transfer_launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "' + str(transfer_result) + '"\n')
 transfer_launcher.chmod(0o755)
 log=(OUTPUT/'ui-check.log').open('w')
-proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen='+str(int('--fullscreen' in sys.argv)),'-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,pass_fds=(save_writer.fileno(),),env={**os.environ,"XMODIFIERS":"@im=none", "VNCMING_SAVE_CREDENTIALS_FD":str(save_writer.fileno()), 'VNCMING_ICON': str(ROOT/'assets/vncming-orange.png'), 'VNCMING_TRANSFER_LAUNCHER': str(transfer_launcher), 'VNCMING_TRANSFER_ADDRESS': '127.0.0.1::'+str(port)})
+proc=subprocess.Popen([str(ROOT/'build/vncviewer/vncviewer'),'-SecurityTypes=Plain','-RemoteResize=0','-FullScreen='+str(int('--fullscreen' in sys.argv)),'-Maximize=0','-FitToWindow=0','-Shared=1','127.0.0.1::'+str(port)],stdout=log,stderr=log,pass_fds=(save_writer.fileno(),),env={**os.environ,"XMODIFIERS":"@im=none", "VNCMING_SAVE_CREDENTIALS_FD":str(save_writer.fileno()), 'VNCMING_ICON': str(ROOT/'assets/vncming-portal.png'), 'VNCMING_TRANSFER_LAUNCHER': str(transfer_launcher), 'VNCMING_TRANSFER_ADDRESS': '127.0.0.1::'+str(port)})
 def find(title):
  import re
  for _ in range(100):

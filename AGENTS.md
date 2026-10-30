@@ -14,6 +14,7 @@ archived copy under `software/tigervnc-classic`.
 - Use `./scripts/check.sh` for headless validation. GUI regression commands are
   documented in `docs/DEVELOPMENT.md`; do not interact with real remote devices
   for automated UI tests.
-- A hostname mismatch may be accepted only for the host explicitly approved by
-  the user. Keep other certificate checks and confirmation result values intact.
+- Accept a hostname mismatch only for an explicitly approved host or when the
+  user enables the global auto-continue preference. Keep other certificate checks
+  and confirmation result values intact.
 - Keep upstream notices and licenses in the vendored TigerVNC source.

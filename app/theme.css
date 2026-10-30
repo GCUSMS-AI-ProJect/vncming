@@ -1,104 +1,111 @@
-/* Shared palette: warm surfaces, restrained orange accents, consistent controls. */
-@define-color canvas #f6f5f3;
-@define-color surface #faf9f7;
-@define-color ink #37322d;
-@define-color secondary #514a43;
-@define-color muted #827467;
-@define-color line #e4dfd9;
-@define-color accent #f58025;
-@define-color accent_hover #ff943f;
-@define-color tint #fff0e2;
-@define-color accent_ink #a44d14;
+/* Cream controls: borderless at rest, neutral outlines on hover and focus. */
+@define-color canvas #fffaf6;
+@define-color surface #fffdfb;
+@define-color ink #443a33;
+@define-color secondary #6a584b;
+@define-color muted #8a7565;
+@define-color line #efdfd2;
+@define-color accent #e97932;
+@define-color accent_hover #f28b45;
+@define-color tint #ffe2c8;
+@define-color accent_ink #9d3b0d;
+@define-color titlebar #ffead9;
+@define-color navigation #fff3e9;
+@define-color control #fffdf8;
+@define-color control_hover #f8f5ef;
+@define-color control_pressed #eeebe4;
+@define-color control_border #cfc7bc;
 
 * { font-family: "Noto Sans CJK SC", sans-serif; font-size: 13px; }
 window { background: @canvas; color: @ink; border-radius: 0 0 12px 12px; }
 decoration { border-radius: 12px; }
-headerbar { background: @surface; border-bottom: 1px solid @line; border-radius: 12px 12px 0 0; padding: 9px 14px; box-shadow: none; }
+headerbar { background: @titlebar; color: @ink; border-bottom: 1px solid @line; border-radius: 12px 12px 0 0; padding: 9px 14px; box-shadow: none; }
 headerbar .title { font-weight: 700; color: @ink; }
+headerbar .subtitle, headerbar .muted { color: @secondary; }
 window.maximized, window.fullscreen, window.maximized headerbar, window.fullscreen headerbar { border-radius: 0; }
 menubar { background: @canvas; padding: 3px 20px; }
-/* Compact desktop navigation below the titlebar; follow the active GTK theme. */
-menubar.desktop-menu { background: @theme_bg_color; padding: 2px 14px; border: none; box-shadow: none; }
-menubar.desktop-menu > menuitem { background: transparent; color: @theme_fg_color; padding: 5px 10px; margin: 0 1px; border: none; border-radius: 4px; }
+/* Keep desktop menu geometry while giving navigation its own orange identity. */
+menubar.desktop-menu { background: @navigation; padding: 2px 14px; border: none; border-bottom: 1px solid @line; box-shadow: none; }
+menubar.desktop-menu > menuitem { background: transparent; color: @ink; padding: 5px 10px; margin: 0 1px; border: none; border-radius: 4px; }
 menubar.desktop-menu > menuitem > label { font-family: "Ubuntu", "Noto Sans CJK SC", sans-serif; font-size: 13px; }
-menubar.desktop-menu > menuitem:hover { background: alpha(@theme_fg_color, 0.08); color: @theme_fg_color; }
-menubar.desktop-menu > menuitem:selected { background: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+menubar.desktop-menu > menuitem:hover { background: @control_hover; color: @ink; }
+menubar.desktop-menu > menuitem:selected { background: @control_hover; color: @ink; }
 menu { background: @surface; color: @ink; border: 1px solid @line; border-radius: 10px; padding: 5px; box-shadow: none; }
 menuitem { padding: 8px 14px; border-radius: 7px; transition: background-color 140ms ease, color 140ms ease; }
 menuitem:hover { background: @tint; color: @accent_ink; }
-menu.desktop-submenu { background: @theme_base_color; color: @theme_fg_color; border-radius: 6px; padding: 4px; }
-menu.desktop-submenu > menuitem { color: @theme_fg_color; border-radius: 4px; padding: 7px 12px; }
-menu.desktop-submenu > menuitem:hover { background: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+menu.desktop-submenu { background: @surface; color: @ink; border-radius: 6px; padding: 4px; }
+menu.desktop-submenu > menuitem { color: @ink; border-radius: 4px; padding: 7px 12px; }
+menu.desktop-submenu > menuitem:hover { background: @control_hover; color: @ink; }
 window.popup { background: transparent; border: none; border-radius: 0; }
 window.popup decoration { background: transparent; border-radius: 10px; box-shadow: 0 4px 12px alpha(@ink, 0.12); }
 .toolbar { background: @canvas; padding: 14px 24px 8px; }
-.section { color: @ink; font-size: 18px; font-weight: 600; }
+.section { color: @accent_ink; font-size: 18px; font-weight: 600; }
 .muted { color: @muted; font-size: 12px; }
-.count-badge { color: @muted; font-size: 12px; padding: 0 2px; }
+.count-badge { color: @accent_ink; background: @tint; border-radius: 10px; font-size: 12px; font-weight: 600; padding: 2px 8px; }
 .empty-title { color: @ink; font-size: 22px; font-weight: 700; }
 .group-title { color: @ink; font-size: 14px; font-weight: 600; }
 
-button { background-image: none; background-color: #ffffff; color: @secondary; border: 1px solid @line; border-radius: 9px; padding: 8px 16px; box-shadow: none; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
-button:hover { background-color: #fff4e9; border-color: #f4bf94; }
-button:active { background-color: #ffe2c9; border-color: #ed995a; }
-button:disabled { color: #b5afa9; background-color: #f2efeb; border-color: @line; }
-button.connect, button.suggested-action { background-color: @accent; color: white; border-color: #eb7520; font-weight: 600; }
-button.connect:hover, button.suggested-action:hover { background-color: @accent_hover; border-color: #f58a36; }
-button.connect:active, button.suggested-action:active { background-color: #dc6817; border-color: #d56416; }
-button.row-connect { background-color: white; color: @secondary; border-color: @line; padding: 7px 12px; }
-button.row-connect:hover { background-color: #ffe2c9; border-color: #ed995a; }
-button.row-delete { background: transparent; color: @muted; border-color: transparent; padding: 7px 8px; }
-button.row-delete:hover { background: #fbece8; color: #a44834; border-color: #edc9c0; }
-button.row-delete:active { background: #f5dbd3; }
+/* Transparent borders reserve space so hover never shifts a button. */
+button { background-image: none; background-color: @control; color: @ink; border: 1px solid transparent; border-radius: 9px; padding: 8px 16px; box-shadow: none; text-shadow: none; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
+button:hover { background-color: @control_hover; border-color: @control_border; }
+button:active { background-color: @control_pressed; border-color: #b9afa2; }
+button:disabled { color: #b5afa9; background-color: #f7f5f1; border-color: transparent; }
+button.connect, button.suggested-action, button.row-connect { font-weight: 600; }
+button.row-connect { padding: 7px 12px; }
+button.row-delete { background-color: transparent; color: @muted; padding: 7px 8px; }
+button.row-delete:hover { background-color: @control_hover; color: @ink; border-color: @control_border; }
+button.row-delete:active { background-color: @control_pressed; }
+button:focus { outline-color: @control_border; outline-style: dashed; outline-width: 1px; outline-offset: -4px; }
 entry { background: white; color: @ink; border: 1px solid @line; border-radius: 9px; padding: 10px 13px; box-shadow: none; transition: border-color 140ms ease, box-shadow 140ms ease; }
 entry:focus { border-color: #f69b59; box-shadow: 0 0 0 2px alpha(@accent, 0.12); }
 entry selection { background: @tint; color: @ink; }
 .validation-error { color: #a44834; font-size: 12px; }
-button.destructive-action { background: #b84736; color: white; border-color: #b84736; }
-button.destructive-action:hover { background: #a33c2c; }
+button.destructive-action { color: #9c4438; }
 combobox button { padding: 8px 10px; }
 expander { color: @secondary; }
 button.path-action { padding: 7px 8px; background: transparent; border-color: transparent; }
-button.path-action:hover { background: @tint; border-color: @line; }
+button.path-action:hover { background: @control_hover; border-color: @control_border; }
+button.path-action:active { background: @control_pressed; }
 *:focus { outline-color: alpha(@accent, 0.35); outline-offset: 2px; }
 check { background: white; border: 1px solid #cbc4bd; border-radius: 5px; min-width: 17px; min-height: 17px; }
-check:checked { background: @accent; color: white; border-color: @accent; }
+check:checked { background: @control_hover; color: @ink; border-color: @control_border; }
 checkbutton { padding: 6px 0; color: @secondary; }
 separator { background: @line; min-height: 1px; }
 
 scrolledwindow { background: white; border: 1px solid @line; border-radius: 12px; padding: 8px; }
 .connection-panel { padding: 8px; }
-.list-columns { color: @muted; font-size: 12px; border-bottom: 1px solid @line; padding-bottom: 8px; }
+.list-columns { color: @accent_ink; background: #fff3e7; border-radius: 7px 7px 0 0; font-size: 12px; border-bottom: 1px solid @line; padding-bottom: 8px; }
 .list-columns label { font-size: 12px; }
 list { background: white; }
 list row { background: transparent; border-radius: 8px; border-bottom: 1px solid #f2efeb; transition: background-color 140ms ease; }
 list row:last-child { border-bottom-color: transparent; }
-list row:hover { background: @surface; }
-list row:selected, list row:selected:hover { background: @tint; color: @secondary; }
+list row:hover { background: #fff0e2; }
+list row:selected, list row:selected:hover { background: @tint; color: @ink; box-shadow: inset 3px 0 @accent; }
+list row:selected .device-icon { color: @accent; }
 .connection-name { font-weight: 600; color: @ink; }
 .connection-address { color: @secondary; }
-.device-icon { color: @muted; }
-.latest-connection { color: @accent_ink; background: @tint; border-radius: 5px; font-size: 10px; padding: 2px 5px; }
+.device-icon { color: @accent_ink; }
+.latest-connection { color: white; background: @accent; border-radius: 5px; font-size: 10px; padding: 2px 5px; }
 treeview { background: white; color: @secondary; -GtkTreeView-vertical-separator: 18; }
 treeview:selected { background: @tint; color: @accent_ink; }
-treeview header button { background: white; border: none; border-bottom: 1px solid @line; border-radius: 0; color: @muted; font-size: 12px; padding: 10px 12px; }
+treeview header button { background: @control; border: none; border-bottom: 1px solid @line; border-radius: 0; color: @muted; font-size: 12px; padding: 10px 12px; }
 scrollbar { background: transparent; }
 scrollbar slider { background: #d8cfc6; border: 3px solid transparent; border-radius: 8px; min-width: 4px; min-height: 24px; }
 scrollbar slider:hover { background: #c4b5a7; }
 
 .apple-sheet { background: @surface; border-radius: 0 0 12px 12px; }
-.apple-sheet headerbar { background: @surface; border-radius: 12px 12px 0 0; border-bottom: 1px solid @line; padding: 12px 16px; }
+.apple-sheet headerbar { background: @titlebar; border-radius: 12px 12px 0 0; border-bottom: 1px solid @line; padding: 12px 16px; }
 .apple-sheet .dialog-vbox { background: transparent; padding: 0; }
 .apple-sheet .dialog-action-area { padding: 12px 20px 18px; }
 .apple-sheet .message-title { font-size: 20px; font-weight: 700; color: @ink; }
 .apple-sheet .message-body { color: @secondary; }
 .apple-sheet box { border-top-left-radius: 0; border-top-right-radius: 0; }
 .apple-sheet > box { border-radius: 0 0 12px 12px; background: @surface; }
-headerbar button.titlebutton { background: transparent; color: @secondary; border: none; border-radius: 50%; min-width: 24px; min-height: 24px; padding: 2px; margin: 0 2px; }
-headerbar button.titlebutton:hover { background: #e9e4de; color: @ink; }
-headerbar button.titlebutton:active { background: #d8cfc6; }
-headerbar button.titlebutton.close { background: #eee9e3; }
-headerbar button.titlebutton.close:hover { background: #f5dbd3; color: #a44834; }
+headerbar button.titlebutton { background: transparent; color: @secondary; border: 1px solid transparent; border-radius: 50%; min-width: 24px; min-height: 24px; padding: 2px; margin: 0 2px; }
+headerbar button.titlebutton:hover { background: @control_hover; color: @ink; border-color: @control_border; }
+headerbar button.titlebutton:active { background: @control_pressed; }
+headerbar button.titlebutton.close { background: transparent; }
+headerbar button.titlebutton.close:hover { background: @control_hover; color: @ink; border-color: @control_border; }
 
 popover.address-suggestions { background: @surface; border: 1px solid @line; border-radius: 12px; padding: 5px; box-shadow: 0 5px 16px alpha(@ink, 0.12); }
 .address-suggestions scrolledwindow { background: transparent; border: none; padding: 0; }

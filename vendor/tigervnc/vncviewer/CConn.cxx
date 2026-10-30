@@ -132,7 +132,7 @@ CConn::CConn(const char* vncServerName, network::Socket* socket=NULL)
       vlog.error("%s", e.str());
       // The native error dialog owns this failure; stop the launcher's timer.
       notifyLauncherConnection('0');
-      abort_connection(_("无法连接到 \"%s\"：\n\n%s"),
+      abort_connection(p_("VNCMing", "Unable to connect to \"%s\":\n\n%s"),
                        vncServerName, e.str());
       return;
     }
@@ -194,11 +194,11 @@ const char *CConn::connectionInfo()
   strcat(infoText, "\n");
 
   if (strcmp(desktopSize, "") != 0) {
-    snprintf(scratch, sizeof(scratch), "请求分辨率：%.32s", (const char*)desktopSize);
+    snprintf(scratch, sizeof(scratch), p_("VNCMing", "Requested resolution: %.32s"), (const char*)desktopSize);
     strcat(infoText, scratch);
     strcat(infoText, "\n");
-    snprintf(scratch, sizeof(scratch), "服务器调整分辨率：%s",
-             server.supportsSetDesktopSize ? "支持" : "不支持，需在远程设备设置");
+    snprintf(scratch, sizeof(scratch), p_("VNCMing", "Server-side resizing: %s"),
+             server.supportsSetDesktopSize ? p_("VNCMing", "Supported") : p_("VNCMing", "Not supported; configure on the remote device"));
     strcat(infoText, scratch);
     strcat(infoText, "\n");
   }

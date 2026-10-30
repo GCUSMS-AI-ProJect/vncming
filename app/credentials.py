@@ -1,4 +1,5 @@
 """Keep connection passwords in the desktop keyring."""
+from i18n import tr
 import gi
 gi.require_version('Secret', '1')
 from gi.repository import Secret
@@ -17,7 +18,7 @@ def store(identifier, label, password):
     if password:
         if not Secret.password_store_sync(SCHEMA, {'id': identifier}, Secret.COLLECTION_DEFAULT,
                                           'VNCMing · ' + label, password, None):
-            raise RuntimeError('无法将密码保存到系统钥匙环。')
+            raise RuntimeError(tr('无法将密码保存到系统钥匙环。'))
     else:
         clear(identifier)
 
